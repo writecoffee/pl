@@ -1,23 +1,22 @@
 #lang pyret/whalesong
 
 fun append(list1 :: List, list2 :: List) -> List:
-  list1 + list2
-#  cases(List) list1:
-#    | empty => (
-#        if list2 == empty:
-#          empty
-#        else:
-#          append(list2, empty)
-#        end
-#      )
-#    | link(value, nextLink) => (
-#        if value == empty:
-#          append(nextLink, list2)
-#        else:
-#          link(value, append(nextLink, list2))
-#        end
-#      )
-#  end
+  cases(List) list1:
+    | empty => (
+        if list2 == empty:
+          empty
+        else:
+          append(list2, empty)
+        end
+      )
+    | link(value, nextLink) => (
+        if value == empty:
+          append(nextLink, list2)
+        else:
+          link(value, append(nextLink, list2))
+        end
+      )
+  end
 where:
 
   # Here we choose Number as the value type of 'link' in the testing.
@@ -66,4 +65,29 @@ where:
 
   append(link(1, link(2, empty)), link(empty, empty)) is [1, 2]
   append(link(empty, empty), link(1, link(2, empty))) is [1, 2]
+end
+
+fun quick-sort(l :: List) -> List:
+  cases(List) l:
+    | empty => empty
+    | link(pivot, nextList) =>
+        partitioned = partition(fun(elem): elem > pivot end, nextList)
+        partitionedSmaller = quick-sort(partitioned.is-false)
+        partitionedBigger = quick-sort(partitioned.is-true)
+        partitionedSmaller + [pivot] + partitionedBigger
+  end
+where:
+  # empty string
+  quick-sort([]) is []
+  # 1 element (no parition needed)
+  quick-sort([1]) is [1]
+  # 2 elements (partition once)
+  quick-sort([3,1]) is [1,3]
+  # >2 elements (input is in ascending order already)
+  quick-sort([1,2,3,4]) is [1,2,3,4]
+  # >2 elements (input is in descending order)
+  quick-sort([4,3,2,1]) is [1,2,3,4]
+  # duplicate elements
+  quick-sort([1,1]) is [1,1]
+  quick-sort([1,3,1,1,2]) is [1,1,1,2,3]
 end
