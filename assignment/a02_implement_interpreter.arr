@@ -35,14 +35,36 @@ fun do-operation(op :: C.Operator, left :: C.Value, right :: C.Value) -> C.Value
         | numV(n) => C.numV(left.value + right.value)
       end
     | minus =>
-      C.numV(left.value - right.value)
+      cases (C.Value) left:
+        | strV(s) => raise("illegal operand")
+        | numV(n) => n
+      end
+      cases (C.Value) right:
+        | strV(s) => raise("illegal operand")
+        | numV(n) => C.numV(left.value - right.value)
+      end
     | append =>
-      C.strV(left.value + right.value)
+      cases (C.Value) left:
+        | numV(n) => raise("illegal operand")
+        | strV(s) => s
+      end
+      cases (C.Value) right:
+        | numV(s) => raise("illegal operand")
+        | strV(n) => C.strV(left.value + right.value)
+      end
     | str-eq =>
-      if left.value.contains(right.value) and right.value.contains(left.value):
-        C.strV("true")
-      else:
-        C.strV("false")
+      cases (C.Value) left:
+        | numV(n) => raise("illegal operand")
+        | strV(s) => s
+      end
+      cases (C.Value) right:
+        | numV(s) => raise("illegal operand")
+        | strV(n) =>
+          if left.value.contains(right.value) and right.value.contains(left.value):
+            C.numV(1)
+          else:
+            C.numV(0)
+          end
       end
   end
 end
@@ -75,6 +97,12 @@ fun interp-env(prog :: C.Expr, env :: C.Env) -> C.Value:
       lookup(s, env)
     | app(f, al) =>
       interp-env(f.body, interp-args(al, f.params, env))
+    | cif(c, sq, alt) =>
+      if interp-env(c, env).value <> 0:
+        interp-env(sq, env)
+      else:
+        interp-env(alt, env)
+      end
   end
 where:
   eval('5') is C.numV(5)
@@ -87,7 +115,14 @@ where:
   eval('(- 3 3)') is C.numV(0)
 
   eval('(++ "hello " "world")') is C.strV("hello world")
-  eval('(== "hello" "hello")') is C.strV("true")
+  eval('(++ "hello " 8)') raises "illegal operand"
+  eval('(++ 8 "hello")') raises "illegal operand"
+  eval('(++ 6 9)') raises "illegal operand"
+
+  eval('(== "hello" "hello")') is C.numV(1)
+  eval('(== "hello" "bybye")') is C.numV(0)
+  eval('(== "hello" 1)') raises "illegal operand"
+  eval('(== 1 "hello")') raises "illegal operand"
 
   eval('((fun (x) (+ x 1)) 3)') is C.numV(4)
   eval('((fun (x) (+ x 1)) "hello")') raises "illegal operand"
@@ -97,4 +132,7 @@ where:
   eval('((fun (x y) (+ x y)) 3)') raises "arity mismatch"
   eval('((fun (x y) (+ x y)) 3 7 9)') raises "arity mismatch"
 
+  eval('(if 1 "yes" "no")') is C.strV("yes") 
+  eval('(if 0 "yes" "no")') is C.strV("no") 
+  eval('(if "str cond" "yes" "no")') is C.strV("yes") 
 end
