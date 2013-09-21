@@ -74,7 +74,7 @@ fun interp(e :: ExprC, nv :: List<Binding>) -> Value:
     | numC(n) => numV(n)        # (1)
     | plusC(l, r) => plus-v(interp(l, nv), interp(r, nv))
     | multC(l, r) => mult-v(interp(l, nv), interp(r, nv))
-    | idC(s) => lookup(s, nv)
+    | idC(s) => numV(lookup(s, nv))
     | fdC(_, _) => closV(e, nv) # (2)
     | appC(f, a) =>
         clos = interp(f, nv)
@@ -84,15 +84,17 @@ fun interp(e :: ExprC, nv :: List<Binding>) -> Value:
 end
 
 check:
-  dbl = fdC("x", plusC(idC("x"), idC("x")))
-  quad = fdC("x", appC(dbl, appC(dbl, idC("x"))))
-  c5 = fdC("_", numC(5))
   fun i(e): interp(e, mt-env) end
-  i(plusC(numC(5), appC(quad, numC(3)))) is 17
-  i(multC(appC(c5, numC(3)), numC(4))) is 20
-  i(plusC(numC(10), appC(c5, numC(10)))) is 15
-  i(plusC(numC(10), appC(dbl, plusC(numC(1), numC(2)))))
-    is 16
-  i(plusC(numC(10), appC(quad, plusC(numC(1), numC(2)))))
-    is 22
+
+  i(appC(fdC("x", appC(fdC("x", fdC("y", plusC(idC("x"), idC("y")))), numC(4))), numC(5)))
+        is closV(fdC("y", plusC(idC("x"), idC("y"))), [bind("x", numV(4)), bind("x", numV(5))])
+
+  i(appC(fdC("y", appC(fdC("x", fdC("y", plusC(idC("x"), idC("y")))), numC(4))), numC(5)))i
+        is closV(fdC("y", plusC(idC("x"), idC("y"))), [bind("x", numV(4)), bind("y", numV(5))])
+
+  i(appC(fdC("x", fdC("x", plusC(idC("x"), idC("x")))), numC(4)))
+        is closV(fdC("x", plusC(idC("x"), idC("x"))), [bind("x", numV(4))])
+
+  i(appC(fdC("x", fdC("y", plusC(idC("x"), idC("y")))), numC(4)))
+        is closV(fdC("y", plusC(idC("x"), idC("y"))), [bind("x", numV(4))])
 end
