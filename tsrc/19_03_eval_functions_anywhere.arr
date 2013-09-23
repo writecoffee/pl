@@ -15,7 +15,7 @@ xtnd-env = link
 
 data Value:
   | numV (n :: Number)
-  | closV (f :: Expr, e :: List<Binding>) # ExprC must be an fdC
+  | closV (f :: ExprC, e :: List<Binding>) # ExprC must be an fdC
 end
 
 data ExprC:
