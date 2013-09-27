@@ -182,35 +182,32 @@ fun fetch(n :: String, st :: Store) -> Value:
 end
 
  
- fun interp-args(
-        args :: List<String>,
-        params :: List<String>,
-        env :: Env,
-        store :: Store) -> Env:
+fun interp-args(
+       args :: List<String>,
+       params :: List<String>,
+       env :: Env,
+       store :: Store) :
 
-   cases (List<String>) args:
-     | empty =>
-       cases (List<String>) params:
-         | link(_, _) => raise("arity mismatch")
-         | empty => mt-env
-       end
-     | link(ae, a-nxt) =>
-       cases (List<String>) params:
-         | empty => raise("arity mismatch")
-         | link(an, p-nxt) =>
-           arg-ret = interp-full(ae, env, store)
-           arg-sto = arg-ret.store
-           arg-val = arg-ret.val
-           arg-loc = gensym("loc:")
-           an-env(an,
-                  arg-loc, 
-                  interp-args(a-nxt, p-nxt, 
-#                              an-env(an, arg-loc, env),
-                              env,
-                              a-store(arg-loc, arg-val, arg-sto)))
-       end
-   end
- end
+  cases (List<String>) args:
+    | empty =>
+      cases (List<String>) params:
+        | link(_, _) => raise("arity mismatch")
+        | empty => mt-env
+      end
+    | link(ae, a-nxt) =>
+      cases (List<String>) params:
+        | empty => raise("arity mismatch")
+        | link(an, p-nxt) =>
+          arg-ret = interp-full(ae, env, store)
+          arg-sto = arg-ret.store
+          arg-val = arg-ret.val
+          arg-loc = gensym("loc:")
+          next-ret = interp-args(a-nxt, p-nxt, env, arg-sto)
+          {e : an-env(an, arg-loc, next-ret.e),
+           sto : a-store(arg-loc, arg-val, next-ret.sto)}
+      end
+  end
+end
 # 
 # # fun local-subst-list(with :: Expr, at :: String, lin :: 
 # 
@@ -264,7 +261,8 @@ fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
     | idE(s) =>
       result(fetch(lookup(s, env), store), store)
     | appE(f, al) =>
-      interp-full(f.body, interp-args(al, f.params, env, store), store)
+      arg-ret = interp-args(al, f.params, env, store)
+      interp-full(f.body, arg-ret.e, arg-ret.sto)
 #    | cifE(c, sq, alt) =>
 #      if interp-env(c, env).value <> 0:
 #        interp-env(sq, env)
