@@ -118,6 +118,14 @@ fun interp(prog :: Expr) -> Value:
 end
 
 fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
+  ##
+  # Helper Function: concat-env
+  # 
+  #   Used for concatinating two environment, the first one 
+  #   would shadow the second one; called by interp-full::appE 
+  #   when we do "let" to extend the environment for the lambda 
+  #   body and evaluate the application body later on together
+  #   with the argment passing in
   fun concat-env(env1 :: Env, env2 :: Env) -> Env:
     cases (Env) env1:
       | mt-env =>
@@ -126,6 +134,12 @@ fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
         an-env(e1-n, e1-l, concat-env(e1-ext, env2))
     end
   end
+  ##
+  # Helper Function: field-helper
+  # 
+  #   To evaluate a list of expression which would be 
+  #   evaluated as field value eventually. Return the field
+  #   list as well as the store modified by then
   fun field-helper(fields :: List<Field>, f-env :: Env, f-store :: Store):
     cases (List<Field>) fields:
       | empty =>
@@ -140,6 +154,11 @@ fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
         {fv-l : [fieldV(fe.name, e-val)] + nxt-val, sto : nxt-sto}
     end
   end
+  ##
+  # Helper Function: lookup-field-helper
+  # 
+  #   To lookup a field value in the field list by referring to 
+  #   their field name with the 'key'
   fun lookup-field-helper(lkp-f-fn :: String, lkp-f-l :: List<FieldV>) -> FieldV:
     cases (List<FieldV>) lkp-f-l:
       | empty =>
