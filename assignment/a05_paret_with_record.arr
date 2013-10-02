@@ -132,18 +132,6 @@ fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
         {fv-l : [fieldV(fe.name, e-val)] + nxt-val, sto : nxt-sto}
     end
   end
-  fun lookup-field-helper-ext(lkpe-f-fn :: String, lkpe-f-l :: List<FieldV>):
-    cases (List<FieldV>) lkpe-f-l:
-      | empty =>
-        {re-v : Nothing, re-r : false}
-      | link(f, f-l-nxt) =>
-        if f.name == lkpe-f-fn:
-          {re-v : f, re-r : true}
-        else:
-          lookup-field-helper-ext(lkpe-f-fn, f-l-nxt)
-        end
-    end
-  end
   fun lookup-field-helper(lkp-f-fn :: String, lkp-f-l :: List<FieldV>) -> FieldV:
     cases (List<FieldV>) lkp-f-l:
       | empty =>
@@ -332,10 +320,22 @@ fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
           app-sto = app-ret.store
           arg-ret = interp-args(arg-l, app-val.params, env, app-sto)
           interp-full(app-val.body, arg-ret.e, arg-ret.sto)
-#        | letE(id, iv, lmd) =>
-#          let-ret = interp-full(f, env, store)
-#          arg-ret = interp-args(arg-l, [iv], env, app-sto)
-#          interp-full(let-ret.val, arg-ret.e, arg-ret.sto)
+        | letE(id, iv, body) =>
+          cases (Expr) body:
+            | lamE(lp-l, lbd) =>
+              iv-ret = interp-full(iv, env, store)
+              iv-val = iv-ret.val
+              iv-sto = iv-ret.store
+              arg-ret = interp-args(arg-l, lp-l, env, iv-sto)
+              id-loc = gensym("loc:")
+              interp-full(lbd,
+                          an-env(id, id-loc, arg-ret.e),
+                          a-store(id-loc, iv-val, arg-ret.sto))
+            | else =>
+              raise("invalid lambda expresion")
+          end
+        | else =>
+          raise("invalid function expression for evaluation")
       end
     | cifE(c, sq, alt) =>
       cond-ret = interp-full(c, env, store)
@@ -352,8 +352,8 @@ fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
       interp-full(bdy,
                   an-env(id, id-loc, env),
                   a-store(id-loc, exp-ret.val, exp-ret.store))
-    | assignE(n, exp) =>
-      var-loc = lookup(n, env)
+    | assignE(id, exp) =>
+      var-loc = lookup(id, env)
       new-ret = interp-full(exp, env, store)
       result(new-ret.val, a-store(var-loc, new-ret.val, new-ret.store))
     | doE(exp-l) =>
@@ -366,25 +366,36 @@ fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
         | recordE(_) =>
           rec-ret = interp-full(r-e, env, store)
           result(lookup-field-helper(fn, rec-ret.val.fields).value, rec-ret.store)
+        | idE(id) =>
+          ide-ret = interp-full(r-e, env, store)
+          ide-val = ide-ret.val
+          ide-sto = ide-ret.store
+          cases (Value) ide-val:
+            | recV(f-l) =>
+              result(lookup-field-helper(fn, f-l).value, ide-sto)
+            | else => 
+              raise("lookupE: the Id: " + fn + " cannot be evaluated to a record value")
+          end
+        | assignE(id, exp) =>
+          asn-ret = interp-full(r-e, env, store)
+          asn-val = asn-ret.val
+          asn-sto = asn-sto.store
+          cases (Value) asn-val:
+            | recV(f-l) =>
+              result(lookup-field-helper(fn, f-l).value, asn-sto)
+            | else => 
+              raise("lookupE: the Id: " + fn + " cannot be evaluated to a record value")
+          end
         | else =>
-          raise("lookupE: the rec cannot be evaluated to a record value")
+          print(r-e)
+          raise("lookupE: the expression cannot be evaluated to a record value")
       end
     | extendE(r-e, fn, nv) =>
       cases (Expr) r-e:
         | recordE(_) =>
           rec-ret = interp-full(r-e, env, store)
-#          lkp-ret = lookup-field-helper-ext(fn, rec-ret.val.fields)
-#          lkp-r = lkp-ret.re-r
-#          lkp-v = lkp-ret.re-v
-#          if lkp-r == true:
-#            nv-ret = interp-full(nv, env, rec-ret.store)
-#            lkp-v.value = nv-ret.val
-#            result(rec-ret.value, nv-ret.store)
-#            rec-ret
-#          else:
           nv-ret = interp-full(nv, env, rec-ret.store)
           result(recV([fieldV(fn, nv-ret.val)] + rec-ret.val.fields), nv-ret.store)
-#          end
         | else =>
           raise("extendE: the rec cannot be evaluated to a record value")
        end
@@ -401,6 +412,12 @@ where:
     len-for-test(link(1, link(2, empty))) is 2
   end
   #######################################################
+  # Application
+  eval("
+    ((let (x 1)
+      (fun (y) (+ x y))) 5)
+  ") is numV(6)
+  #######################################################
   # Records
   eval('
     (record (x 1) (y 3))
@@ -411,4 +428,27 @@ where:
   eval('
     (extend (record (x 1) (y 3)) z 9)
   ') is recV([fieldV("z", numV(9)), fieldV("x", numV(1)), fieldV("y", numV(3))])
+  eval('
+    (extend (record (x 1) (y 3)) x 9)
+  ') is recV([fieldV("x", numV(9)), fieldV("x", numV(1)), fieldV("y", numV(3))])
+  eval('
+    (extend (record (x 1) (y 3)) x 9)
+  ') is recV([fieldV("x", numV(9)), fieldV("x", numV(1)), fieldV("y", numV(3))])
+  eval('
+    (let (my-record (record (x 1) (y 3)))
+      ((fun (a1 a2 a3) (+ a1 (- a2 a3)))
+          (do (assign my-record (record (x 99) (y 999)))
+              (lookup my-record x))
+          0 0))
+  ') is numV(99)
+  eval('
+    (let (my-record (record (x 1) (y 3)))
+      ((fun (a1 a2 a3) (+ a1 (- a2 a3)))
+          (do (assign my-record (record (x 99) (y 999)))
+              (+ (lookup my-record x) 
+                 (+ (lookup (assign my-record (record (x 0) (y 0))) x)
+                    (lookup my-record y))))
+          0 0))
+  ') is numV(99)
+
 end
