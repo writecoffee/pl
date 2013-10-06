@@ -179,7 +179,7 @@ fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
   fun lookup-field-helper(lkp-f-fn :: String, lkp-f-l :: List<FieldV>) -> FieldV:
     cases (List<FieldV>) lkp-f-l:
       | empty =>
-        raise("cannot find: " + lkp-f-fn + " in record")
+        raise("record field: " + lkp-f-fn + " not found")
       | link(f, f-l-nxt) =>
         if f.name == lkp-f-fn:
           f
@@ -410,7 +410,7 @@ fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
             | recV(f-l) =>
               result(lookup-field-helper(fn, f-l).value, oe-sto)
             | else =>
-              raise("lookupE: " + r-e + " cannot be evaluated to a record value")
+              raise("lookupE: input cannot be evaluated to a record value")
           end
       end
     | extendE(r-e, fn, nv) =>
@@ -430,7 +430,7 @@ fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
               nv-sto = nv-ret.store
               result(recV([fieldV(fn, nv-val)] + f-l), nv-sto)
             | else =>
-              raise("extendE: the rec cannot be evaluated to a record value")
+              raise("extendE: input cannot be evaluated to a record value")
           end
        end
     | withE(ns, bdy) =>
@@ -470,18 +470,163 @@ where:
     len-for-test(link(1, link(2, empty))) is 2
   end
   #######################################################
-  # States
-  eval("
+  # Values
+  #
+  eval('5') is numV(5)
+  eval('"My name is parat"') is strV("My name is parat")
+
+  eval('(fun () (3))').params.length() is 0
+  eval('(fun () (3))').body is appE(numE(3), [])
+  eval('(fun () (3))').env is mt-env
+
+  eval('(fun (x y) (+ x y))').params.length() is 2
+  eval('(fun (x y) (+ x y))').body is bopE(plus, idE("x"), idE("y"))
+  eval('(fun (x y) (+ x y))').env is mt-env
+
+  eval('(fun (x y) (+ x (+ y z)))').params.length() is 2
+  eval('(fun (x y) (+ x (+ y z)))').body is bopE(plus, idE("x"), bopE(plus, idE("y"), idE("z")))
+  eval('(fun (x y) (+ x (+ y z)))').env is mt-env
+  #######################################################
+  # Binary Operation
+  #
+  eval('(+ 3 3)') is numV(6)
+  eval('(+ "hello " "world")') raises "illegal operand"
+  eval('(+ 3 "world")') raises "illegal operand"
+  eval('(+ "Hello" 9)') raises "illegal operand"
+  eval('(+ 3 (fun (x y) (+ x y)))') raises "illegal operand"
+  eval('(+ (fun (x y) (+ x y)) 3)') raises "illegal operand"
+  eval('(- 3 3)') is numV(0)
+  eval('(- "hello " "world")') raises "illegal operand"
+  eval('(- 3 "world")') raises "illegal operand"
+  eval('(- "Hello" 9)') raises "illegal operand"
+  eval('(- 3 (fun (x y) (+ x y)))') raises "illegal operand"
+  eval('(- (fun (x y) (+ x y)) 3)') raises "illegal operand"
+  eval('(++ "hello " "world")') is strV("hello world")
+  eval('(++ "hello " 8)') raises "illegal operand"
+  eval('(++ 8 "hello")') raises "illegal operand"
+  eval('(++ 6 9)') raises "illegal operand"
+  eval('(++ "hello" (fun (x y) (+ x y)))') raises "illegal operand"
+  eval('(++ (fun (x y) (+ x y)) "hello")') raises "illegal operand"
+  eval('(== "hello" "hello")') is numV(1)
+  eval('(== "hello" "bybye")') is numV(0)
+  eval('(== "hello" 1)') raises "illegal operand"
+  eval('(== 1 "hello")') raises "illegal operand"
+  eval('(== "hello" (fun (x y) (+ x y)))') raises "illegal operand"
+  eval('(== (fun (x y) (+ x y)) "hello")') raises "illegal operand"
+  #######################################################
+  # Identifier, Lambda and Trivial Application
+  #
+  eval('
+    non-existent-id
+  ') raises "unbound identifier: non-existent-id"
+  eval('
+    ((fun () (+ 1 2)))
+  ') is numV(3)
+  eval('
+    ((fun (x) (+ x 1)) 3)
+  ') is numV(4)
+  eval('
+    ((fun (x y) (+ x y)) 3 7)
+  ') is numV(10)
+  eval('
+    ((fun (x y) (+ x y)) )
+  ') raises "arity mismatch"
+  eval('
+    ((fun (x y) (+ x y)) 3)
+  ') raises "arity mismatch"
+  eval('
+    ((fun (x y) (+ x y)) 3 7 9)
+  ') raises "arity mismatch"
+  eval('
+    ((fun (x y) (+ x y)) 3 m)
+  ') raises "unbound identifier: m"
+  eval('
+    ((fun (x y) x) 3 7)
+  ') is numV(3)
+  eval('
+    ((fun (x y)
+        (if (== x y) 1 0))
+        "hello" "hello")
+  ') is numV(1)
+  eval('
+    ((fun (x y)
+        (if (== x y) 1 0))
+        "goodbye" "hello")
+  ') is numV(0)
+  eval('
+    ((fun (x y)
+        ((fun (x y)
+            (+ x y)) 1 1)) 3 7)')
+    is numV(2)
+  #######################################################
+  # Local Binding (w/ or w/o Application)
+  #   & Sequences & Stateful Assign Operation
+  #
+  eval('
+    (do (+ 1 1))
+  ') 2
+  eval('
+    (do (++ "hello " "world"))
+  ') strV("hello world")
+  eval('
+    (do (+ x 1))
+  ') raises "unbound identifier: x"
+  eval('
+    (let (x 3) (+ x 1))
+  ') is numV(4)
+  eval('
+    (let (x 1) (assign x 2))
+  ') is numV(2)
+  eval('
+    (let (x unbound-id) (assign x 2))
+  ') raises "unbound identifier: unbound-id"
+#  eval('
+#    (let 
+#      (tempting-lp (fun () (tempting-lp)))
+#      (tempting-lp))
+#  ') raises "unbound identifier: tempting-lp"
+  eval('
+    (let (x 1) 
+      (do (+ x 1)
+          (+ x 1)))
+  ') is numV(2)
+  eval('
+    (let (x 1) 
+      (do (assign x 9)
+          (+ x 1)))
+  ') is numV(10)
+  eval('
+    (let (x 1) 
+      (do (assign x 9)
+          (+ x (+ x x))))
+  ') is numV(27)
+  eval('
+    (let (x 1) 
+      ((fun (a1 a2 a3) (+ a1 (- a2 a3)))
+          (do (assign x 9)
+            (+ x (+ x x)))
+          (- x 10)
+          (+ x 10)))
+  ') is numV(7)
+  eval('
+    (let
+      (my-fun-id
+            (fun (fx fy fz) (+ fz (+ fx fy))))
+      (let (x 0)
+          (do (assign x (my-fun-id 1 2 3))
+              (+ x (+ x x)))))
+  ') is numV(18)
+  eval('
     ((let (x 1)
       (fun (y) (+ x y))) 5)
-  ") is numV(6)
+  ') is numV(6)
   eval('
     (let (myFunc (fun (x) (assign x 1)))
       (let (y 0)
         (do (myFunc y) y)))
   ') is numV(0)
-  #######################################################
-  # Records
+ #######################################################
+ # Records
   eval('
     (lookup (record (x 1) (y 3)) x)
   ') is numV(1)
@@ -515,8 +660,19 @@ where:
                  (+ (lookup (assign my-record (record (x -1) (y 0))) x)
                     (lookup my-record y))))))
   ') is numV(5)
+  eval('
+    (lookup (record (x 1) (y 3)) not-exist-id)
+  ') raises "record field: not-exist-id not found"
+  eval('
+    (lookup (fun () 3) not-exist-id)
+  ') raises "lookupE: input cannot be evaluated to a record value"
+  eval('
+    (let (my-record (record (x 1) (y 3)))
+         (lookup (extend (fun () 3) z 9) z))
+  ') raises "extendE: input cannot be evaluated to a record value"
   #######################################################
   # With
+  #
   eval('
     (with (record (x 1) (y 3)) x)
   ') is numV(1)
@@ -594,8 +750,7 @@ where:
         (my-record (record (argX 1) (argY 10) (argZ 100)))
         (fun (choice base)
              (if (== choice "c1")
-                 (with (extend my-record argX -1)
-                       (- base argX))
+                 (with (extend my-record argX -1) (- base argX))
                  (if (== choice "c2")
                      (- base (lookup my-record argY))
                      (if == choice "c3")
@@ -603,4 +758,20 @@ where:
                        ("UNKNOWN CHOICE")))))
       "c1" 0)
   ') is numV(1)
+  eval('
+    (let (x 100)
+      (let (my-record (record (x 1) (y 100)))
+        ((fun (a1 a2 a3) (+ a1 (- a2 a3)))
+            (with "hello, I'm not a recV" x)
+            (with my-record y)
+            x)))
+  ') raises "withE: the namespace cannot be evaluated to a record value"
+  eval('
+    (let (outmostId 100)
+      (let (my-record (record (x 1) (y 100)))
+        ((fun (a1 a2 a3) (+ a1 (- a2 a3)))
+            (with my-record z)
+            (with my-record y)
+            outmostId)))
+  ') raises "unbound identifier: z"
 end
