@@ -657,9 +657,21 @@ where:
        (with (record (x 3)) (+ x x)))
   ') is numV(6)
   eval('
-    (let (x 1)
-       (with (record (x 3)) (+ x x)))
-  ') is numV(6)
+    (with (record (x (record (z 10))))
+          (with x z))
+  ') is numV(10)
+  eval('
+    (with (record (x 10))
+          (do (assign x 5) x))
+  ') is numV(5)
+  eval('
+    (let (x (record (z 10)))
+         (with x (+ z (lookup x z))))
+  ') is numV(20)
+  eval('
+    (let (x 5) 
+         (with (record (a (assign x 10))) x))
+  ') is numV(10)
   eval('
     (let (x 100)
       (let (my-record (record (x 1) (y 100)))
