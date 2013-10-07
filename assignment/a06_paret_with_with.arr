@@ -232,55 +232,29 @@ fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
   #   an operator.
   #
   fun do-operation(op :: Operator, left :: Value, right :: Value) -> Value:
+    fun type-checking(t):
+      if not (t(left) and t(right)):
+        raise("illegal operand for operator: " + op)
+      else:
+        nothing
+      end
+    end
     cases (Operator) op:
       | plus =>
-        cases (Value) left:
-          | funV(_, _, _) => raise("illegal operand")
-          | strV(_) => raise("illegal operand")
-          | numV(n) => n
-        end
-        cases (Value) right:
-          | funV(_, _, _) => raise("illegal operand")
-          | strV(_) => raise("illegal operand")
-          | numV(n) => numV(left.value + right.value)
-        end
+        type-checking(is-numV)
+        numV(left.value + right.value)
       | minus =>
-        cases (Value) left:
-          | funV(_, _, _) => raise("illegal operand")
-          | strV(_) => raise("illegal operand")
-          | numV(n) => n
-        end
-        cases (Value) right:
-          | funV(_, _, _) => raise("illegal operand")
-          | strV(_) => raise("illegal operand")
-          | numV(n) => numV(left.value - right.value)
-        end
+        type-checking(is-numV)
+        numV(left.value - right.value)
       | append =>
-        cases (Value) left:
-          | funV(_, _, _) => raise("illegal operand")
-          | numV(_) => raise("illegal operand")
-          | strV(s) => s
-        end
-        cases (Value) right:
-          | funV(_, _, _) => raise("illegal operand")
-          | numV(_) => raise("illegal operand")
-          | strV(n) => strV(left.value + right.value)
-        end
+        type-checking(is-strV)
+        strV(left.value.append(right.value))
       | str-eq =>
-        cases (Value) left:
-          | funV(_, _, _) => raise("illegal operand")
-          | numV(_) => raise("illegal operand")
-          | strV(s) => s
-        end
-        cases (Value) right:
-          | funV(_, _, _) => raise("illegal operand")
-          | numV(_) => raise("illegal operand")
-          | strV(n) =>
-            if left.value == right.value:
-              numV(1)
-            else:
-              numV(0)
-            end
+        type-checking(is-strV)
+        if left.value == right.value:
+          numV(1)
+        else:
+          numV(0)
         end
     end
   end
@@ -459,16 +433,6 @@ fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
       end
   end
 where:
-  fun len-for-test(l :: List) -> Number:
-    cases(List) l:
-      | empty => 0
-      | link(f, r) => 1 + len-for-test(r)
-    end
-  where:
-    len-for-test(empty) is 0
-    len-for-test(link(1, empty)) is 1
-    len-for-test(link(1, link(2, empty))) is 2
-  end
   #######################################################
   # Values
   #
@@ -490,29 +454,29 @@ where:
   # Binary Operation
   #
   eval('(+ 3 3)') is numV(6)
-  eval('(+ "hello " "world")') raises "illegal operand"
-  eval('(+ 3 "world")') raises "illegal operand"
-  eval('(+ "Hello" 9)') raises "illegal operand"
-  eval('(+ 3 (fun (x y) (+ x y)))') raises "illegal operand"
-  eval('(+ (fun (x y) (+ x y)) 3)') raises "illegal operand"
+  eval('(+ "hello " "world")') raises ""
+  eval('(+ 3 "world")') raises ""
+  eval('(+ "Hello" 9)') raises ""
+  eval('(+ 3 (fun (x y) (+ x y)))') raises ""
+  eval('(+ (fun (x y) (+ x y)) 3)') raises ""
   eval('(- 3 3)') is numV(0)
-  eval('(- "hello " "world")') raises "illegal operand"
-  eval('(- 3 "world")') raises "illegal operand"
-  eval('(- "Hello" 9)') raises "illegal operand"
-  eval('(- 3 (fun (x y) (+ x y)))') raises "illegal operand"
-  eval('(- (fun (x y) (+ x y)) 3)') raises "illegal operand"
+  eval('(- "hello " "world")') raises ""
+  eval('(- 3 "world")') raises ""
+  eval('(- "Hello" 9)') raises ""
+  eval('(- 3 (fun (x y) (+ x y)))') raises ""
+  eval('(- (fun (x y) (+ x y)) 3)') raises ""
   eval('(++ "hello " "world")') is strV("hello world")
-  eval('(++ "hello " 8)') raises "illegal operand"
-  eval('(++ 8 "hello")') raises "illegal operand"
-  eval('(++ 6 9)') raises "illegal operand"
-  eval('(++ "hello" (fun (x y) (+ x y)))') raises "illegal operand"
-  eval('(++ (fun (x y) (+ x y)) "hello")') raises "illegal operand"
+  eval('(++ "hello " 8)') raises ""
+  eval('(++ 8 "hello")') raises ""
+  eval('(++ 6 9)') raises ""
+  eval('(++ "hello" (fun (x y) (+ x y)))') raises ""
+  eval('(++ (fun (x y) (+ x y)) "hello")') raises ""
   eval('(== "hello" "hello")') is numV(1)
   eval('(== "hello" "bybye")') is numV(0)
-  eval('(== "hello" 1)') raises "illegal operand"
-  eval('(== 1 "hello")') raises "illegal operand"
-  eval('(== "hello" (fun (x y) (+ x y)))') raises "illegal operand"
-  eval('(== (fun (x y) (+ x y)) "hello")') raises "illegal operand"
+  eval('(== "hello" 1)') raises ""
+  eval('(== 1 "hello")') raises ""
+  eval('(== "hello" (fun (x y) (+ x y)))') raises ""
+  eval('(== (fun (x y) (+ x y)) "hello")') raises ""
   #######################################################
   # Identifier, Lambda and Trivial Application
   #
@@ -762,7 +726,7 @@ where:
     (let (x 100)
       (let (my-record (record (x 1) (y 100)))
         ((fun (a1 a2 a3) (+ a1 (- a2 a3)))
-            (with "hello, I'm not a recV" x)
+            (with "hello, I am not a recV" x)
             (with my-record y)
             x)))
   ') raises "withE: the namespace cannot be evaluated to a record value"
