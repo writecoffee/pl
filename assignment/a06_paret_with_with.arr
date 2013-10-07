@@ -121,6 +121,14 @@ fun interp(prog :: Expr) -> Value:
 end
 
 fun interp-full(prog :: Expr, env :: Env, store :: Store) -> Result:
+  ##
+  # Helper Function: with-helper
+  #
+  # Allocate new environment and store slot for the field list,
+  # padding them at the head of the environment and store list.
+  # It will return a new environment and store list that is a
+  # concatentation of the field list passing in and the original
+  # environment and store
   fun with-helper(fields :: List<FieldV>, w-env :: Env, w-sto :: Store):
     cases (List<FieldV>) fields:
       | empty => 
