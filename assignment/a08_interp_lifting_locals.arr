@@ -318,15 +318,15 @@ fun interp-full(prog :: Block, env :: Env, store :: Store) -> Result:
         lv = interp-full-expr(l, env, ie-store)
         rv = interp-full-expr(r, env, lv.store)
         result(do-operation(op, lv.val, rv.val), rv.store)
-#      | cifE(c, sq, alt) =>
-#        cond-ret = interp-full(c, env, ie-store)
-#        cond-val = cond-ret.val
-#        cond-sto = cond-ret.store
-#        if cond-val == numV(1):
-#          interp-full(sq, env, cond-sto)
-#        else:
-#          interp-full(alt, env, cond-sto)
-#        end
+      | cifE(c, sq, alt) =>
+        cond-ret = interp-full-expr(c, env, ie-store)
+        cond-val = cond-ret.val
+        cond-sto = cond-ret.store
+        if cond-val == numV(1):
+          interp-full-expr(sq, env, cond-sto)
+        else:
+          interp-full-expr(alt, env, cond-sto)
+        end
 #      | lookupE(r-e, fn) =>
 #        cases (Expr) r-e:
 #          | recordE(_) =>
@@ -442,6 +442,9 @@ where:
   #######################################################
   # TC-V: Values
   #
+  eval('
+    null
+  ') is nullV
   eval('
     5
   ') is numV(5)
@@ -569,5 +572,50 @@ where:
     (fun (x y)
          (+ x (+ y z)))
   ').env is mt-env
-
+  #######################################################
+  # TC-IF: If-else Expression
+  #
+  eval('
+    (if 1 1 0)
+  ') is numV(1)
+  eval('
+    (if 0 1 0)
+  ') is numV(0)
+  eval('
+    (fun (x y)
+         "doc"
+         (if (== x y) 1 0))
+  ') is 
+    funV(
+      ["x", "y"],
+      block([expr-stmt(strE("doc")),
+             expr-stmt(cifE(bopE(str-eq, idE("x"), idE("y")),
+                            numE(1),
+                            numE(0)))]),
+      mt-env)
+  eval('
+    (fun (input)
+         (if (== input "string-type")
+             (fun (m n)
+                  (if (== m n) "equal-value" "unequal-value"))
+             (fun (m n)
+                  (if (== m n) 1 0))))
+  ') is 
+    funV(
+      ["input"],
+      block([
+        expr-stmt(
+          cifE(
+            bopE(str-eq, idE("input"), strE("string-type")),
+            lamE(["m", "n"],
+                 block([expr-stmt(
+                   cifE(bopE(str-eq, idE("m"), idE("n")),
+                        strE("equal-value"),
+                        strE("unequal-value")))])),
+            lamE(["m", "n"],
+                 block([expr-stmt(
+                   cifE(bopE(str-eq, idE("m"), idE("n")),
+                        numE(1),
+                        numE(0)))]))))]),
+      mt-env)
 end
