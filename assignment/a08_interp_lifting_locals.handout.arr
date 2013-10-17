@@ -32,6 +32,7 @@ If a block contains more than one defvar binding the same identifier, your inter
 
 2 The New Grammar
 
+===========================================================================
  
 <prog> ::= <stmt> <stmt> ...  // called a 'block' in the abstract syntax
  
@@ -55,6 +56,9 @@ If a block contains more than one defvar binding the same identifier, your inter
          | null
  
 <field> ::= (<id> <expr>)   // field name, followed by field value
+
+===========================================================================
+
 2.1 Statements vs. Expressions
 
 Notice that in the grammar, expressions may be used in place of statements, but not vice-versa. Thus a program like (+ (assign x 1) 2) is now syntactically invalid, i.e. it does not conform to the grammar. You do not need to check that your input program conforms to the grammar, and should not write test cases of programs that do not conform to the grammar.
@@ -62,9 +66,15 @@ Notice that in the grammar, expressions may be used in place of statements, but 
 There are other changes to the grammar as well (such as the removal of let, do, and with). When writing your test cases, carefully ensure that the programs you write conform to the new grammar.
 
 Your program as a whole is now a list of statements, instead of an expression. Thus "1 2 3" is a valid Paret-with-blocks program that evaluates to 3. And
+
+===========================================================================
+
 (defvar y (fun () x))
 (defvar x 1)
 (y)
+
+===========================================================================
+
 is a valid program that evalutes to 1.
 Function bodies are also now blocks, so that (fun (x) (defvar y 1) y) is a valid function. This begs the question of how function parameters, defvars, and assignments within the function body should interact. If there is a defvar in a function body for an identifier which is also a function parameter, the defvar should introduce a new binding to the environment that shadows the function parameter.
 
