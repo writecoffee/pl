@@ -139,7 +139,287 @@ fun interp(prog :: Block) -> Value:
 end
 
 fun interp-full(prog :: Block, env :: Env, store :: Store) -> Result:
-
+  ##
+  # Helper Function: field-helper
+  # 
+  #   To evaluate a list of expression which would be 
+  #   evaluated as field value eventually. Return the field
+  #   list as well as the store modified by then
+  fun field-helper(fields :: List<Field>, f-env :: Env, f-store :: Store):
+    cases (List<Field>) fields:
+      | empty =>
+        {fv-l : [], sto : f-store}
+      | link(fe, nxt) =>
+        e-ret = interp-full(fe.value, f-env, f-store)
+        e-val = e-ret.val
+        e-sto = e-ret.store
+        nxt-ret = field-helper(nxt, f-env, e-sto)
+        nxt-val = nxt-ret.fv-l
+        nxt-sto = nxt-ret.sto
+        {fv-l : [fieldV(fe.name, e-val)] + nxt-val, sto : nxt-sto}
+    end
+  end
+  ##
+  # Helper Function: lookup-field-helper
+  # 
+  #   To lookup a field value in the field list by referring to 
+  #   their field name with the 'key'
+  fun lookup-field-helper(lkp-f-fn :: String, lkp-f-l :: List<FieldV>) -> FieldV:
+    cases (List<FieldV>) lkp-f-l:
+      | empty =>
+        raise("record field: " + lkp-f-fn + " not found")
+      | link(f, f-l-nxt) =>
+        if f.name == lkp-f-fn:
+          f
+        else:
+          lookup-field-helper(lkp-f-fn, f-l-nxt)
+        end
+    end
+  end
+  ##
+  # Helper Functions: lookup
+  #
+  #   To get the location for a specific identifier from the 
+  #   environment list; raises exception if couldn't find it.
+  fun lookup(lkp-s :: String, lkp-env :: Env) -> String:
+    cases (Env) lkp-env:
+      | mt-env => raise("unbound identifier: " + lkp-s)
+      | an-env(fn, v, e) =>
+          if lkp-s == fn:
+            v
+          else:
+            lookup(lkp-s, e)
+          end
+    end
+  end
+  ##
+  # Helper Functions: fetch
+  #
+  #   To get the value from a specific location "address" from
+  #   the storage list; raises exception if couldn't find it.
+  #   The latest/inner-most assigning for a specific identifier
+  #   should be the one closest to the front of the list.
+  fun fetch(n :: String, ft-st :: Store) -> Value:
+    cases (Store) ft-st:
+      | mt-store => raise("unknown location: " + n)
+      | a-store(lo, v, s) =>
+        if n == lo:
+          v
+        else:
+          fetch(n, s)
+        end
+    end
+  end
+  ##
+  # Helper Functions: do-operation
+  #
+  #   To do the binary operation for the left value and right value
+  #   which are both evaluated before calling this; Would raise
+  #   illegal operand exception if (1) these two parameters are not
+  #   of the same class of value, (2) wrong operand is passed for
+  #   an operator.
+  #
+  fun do-operation(op :: Operator, left :: Value, right :: Value) -> Value:
+    fun type-checking(t):
+      if not (t(left) and t(right)):
+        raise("illegal operand for operator: " + op)
+      else:
+        nothing
+      end
+    end
+    cases (Operator) op:
+      | plus =>
+        type-checking(is-numV)
+        numV(left.value + right.value)
+      | minus =>
+        type-checking(is-numV)
+        numV(left.value - right.value)
+      | append =>
+        type-checking(is-strV)
+        strV(left.value.append(right.value))
+      | str-eq =>
+        type-checking(is-strV)
+        if left.value == right.value:
+          numV(1)
+        else:
+          numV(0)
+        end
+    end
+  end
+  ##
+  # Helper Function: concat-env
+  # 
+  #   Used for concatinating two environment, the first one 
+  #   would shadow the second one; called by interp-full::appE 
+  #   when we do "let" to extend the environment for the lambda 
+  #   body and evaluate the application body later on together
+  #   with the argment passing in
+  fun concat-env(env1 :: Env, env2 :: Env) -> Env:
+    cases (Env) env1:
+      | mt-env =>
+        env2
+      | an-env(e1-n, e1-l, e1-ext) =>
+        an-env(e1-n, e1-l, concat-env(e1-ext, env2))
+    end
+  end
+  ##
+  # Helper Functions: interp-full-expr-args
+  #
+  #   This function would update the environment passing in and pop 
+  #   the result up to the caller ('interp-full' in the end).
+  #   Repeatedly thread the store from the head of the arg/param
+  #   list to the end.   
+  #
+  fun interp-full-expr-args(
+         args :: List<String>,
+         params :: List<String>,
+         h-arg-env :: Env,
+         h-arg-store :: Store):
+    cases (List<String>) args:
+      | empty =>
+        cases (List<String>) params:
+          | link(_, _) => raise("arity mismatch")
+          | empty => {e : h-arg-env, sto : h-arg-store}
+        end
+      | link(ae, a-nxt) =>
+        cases (List<String>) params:
+          | empty => raise("arity mismatch")
+          | link(an, p-nxt) =>
+            arg-ret = interp-full(ae, h-arg-env, h-arg-store)
+            arg-sto = arg-ret.store
+            arg-val = arg-ret.val
+            arg-loc = gensym("loc:")
+            next-ret = interp-full-expr-args(a-nxt, p-nxt, h-arg-env, arg-sto)
+            {e : an-env(an, arg-loc, next-ret.e),
+             sto : a-store(arg-loc, arg-val, next-ret.sto)}
+        end
+    end
+  end
+  ##
+  # interp-full-expr:
+  #
+  #   Interpret one specific expression at once. This is mostly 
+  #   inherrited from previous assignments.
+  #
+  fun interp-full-expr(ie-expr :: Expr, ie-env :: Env, ie-store :: Store) -> Result:
+    cases (Expr) prog:
+      | nullE =>
+        result(nullV, store)
+      | numE(n) =>
+        result(numV(n), store)
+      | strE(s) =>
+        result(strV(s), store)
+      | bopE(op, l, r) =>
+        lv = interp-full(l, env, store)
+        rv = interp-full(r, env, lv.store)
+        result(do-operation(op, lv.val, rv.val), rv.store)
+      | cifE(c, sq, alt) =>
+        cond-ret = interp-full(c, env, store)
+        cond-val = cond-ret.val
+        cond-sto = cond-ret.store
+        if cond-val == numV(1):
+          interp-full(sq, env, cond-sto)
+        else:
+          interp-full(alt, env, cond-sto)
+        end
+      | recordE(f-l) =>
+        f-l-ret = field-helper(f-l, env, store)
+        result(recV(f-l-ret.fv-l), f-l-ret.sto)
+      | lookupE(r-e, fn) =>
+        cases (Expr) r-e:
+          | recordE(_) =>
+            rec-ret = interp-full(r-e, env, store)
+            rec-val = rec-ret.val
+            rec-sto = rec-ret.store
+            result(lookup-field-helper(fn, rec-val.fields).value, rec-ret.store)
+          | else =>
+            oe-ret = interp-full(r-e, env, store)
+            oe-val = oe-ret.val
+            oe-sto = oe-ret.store
+            cases (Value) oe-val:
+              | recV(f-l) =>
+                result(lookup-field-helper(fn, f-l).value, oe-sto)
+              | else =>
+                raise("lookupE: input cannot be evaluated to a record value")
+            end
+        end
+      | extendE(r-e, fn, nv) =>
+        cases (Expr) r-e:
+          | recordE(_) =>
+            rec-ret = interp-full(r-e, env, store)
+            nv-ret = interp-full(nv, env, rec-ret.store)
+            result(recV([fieldV(fn, nv-ret.val)] + rec-ret.val.fields), nv-ret.store)
+          | else =>
+            oe-ret = interp-full(r-e, env, store)
+            oe-val = oe-ret.val
+            oe-sto = oe-ret.store
+            cases (Value) oe-val:
+              | recV(f-l) =>
+                nv-ret = interp-full(nv, env, oe-sto)
+                nv-val = nv-ret.val
+                nv-sto = nv-ret.store
+                result(recV([fieldV(fn, nv-val)] + f-l), nv-sto)
+              | else =>
+                raise("extendE: input cannot be evaluated to a record value")
+            end
+        end
+      | lamE(p-l, blk) =>
+        raise("NOT-YET-IMPLEMENTED")
+      | appE(fun-e, arg-l) =>
+        cases (Expr) fun-e:
+          | lamE(_, _) =>
+            app-ret = interp-full-expr(fun-e, ie-env, ie-store)
+            app-val = app-ret.val
+            app-sto = app-ret.store
+            arg-ret = interp-full-expr-args(arg-l, app-val.params, env, app-sto)
+            interp-full-expr(app-val.body, arg-ret.e, arg-ret.sto)
+          | else =>
+            oe-ret = interp-full-expr(fun-e, ie-env, ie-store)
+            oe-val = oe-ret.val
+            oe-sto = oe-ret.store
+            cases (Value) oe-val:
+              | funV(f-p-l, f-b, f-env) =>
+                arg-ret = interp-full-expr-args(
+                             arg-l, f-p-l, concat-env(f-env, env), oe-sto)
+                interp-full(f-b, arg-ret.e, arg-ret.sto)
+              | else =>
+                raise("appE: " + fun-e + " cannot be evaluated to a function value")
+            end
+        end
+    end
+  end
+  ##
+  # interp-full-stmt:
+  #
+  #   Interpret one specific type of statement at once.
+  #
+  fun interp-full-stmt(is-stmt :: Stmt, is-env :: Env, is-store :: Store) -> Result:
+    cases (Stmt) is-stmt:
+      | Expr(e) =>
+        interp-full-expr(e, is-env, is-store)
+      | else =>
+        raise("unknown statement: " + is-stmt)
+    end
+  end
+  ##
+  # Entrance of interp-full:
+  #
+  #   Interpret the program, aka the statements, sequentially by 
+  #   calling interp-full-stmt. For interpreting for every statement,
+  #   it will probe one more link to see if it needs to return the
+  #   current interpretted result as the final result.
+  #
+  cases (List<Stmt>) prog:
+    | empty =>
+      result(nothing, store)
+    | link(stmt, nxt-stmts) =>
+      if nxt-stmts == empty:
+        interp-full-stmt(nxt-stmts, env, store)
+      else:
+        st-res = interp-full-stmt(stmt, env, store)
+        interp-full(nxt-stmts, env, st-res.store)
+      end
+  end
 where:
 
 end
