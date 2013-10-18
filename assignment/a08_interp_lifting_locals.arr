@@ -312,80 +312,141 @@ fun interp-full(prog :: Block, env :: Env, store :: Store) -> Result:
       | lamE(p-l, blk) =>
         result(funV(p-l, blk, ie-env), ie-store)
       | recordE(f-l) =>
-        f-l-ret = field-helper(f-l, env, ie-store)
+        f-l-ret = field-helper(f-l, ie-env, ie-store)
         result(recV(f-l-ret.fv-l), f-l-ret.sto)
       | bopE(op, l, r) =>
-        lv = interp-full-expr(l, env, ie-store)
-        rv = interp-full-expr(r, env, lv.store)
+        lv = interp-full-expr(l, ie-env, ie-store)
+        rv = interp-full-expr(r, ie-env, lv.store)
         result(do-operation(op, lv.val, rv.val), rv.store)
       | cifE(c, sq, alt) =>
-        cond-ret = interp-full-expr(c, env, ie-store)
+        cond-ret = interp-full-expr(c, ie-env, ie-store)
         cond-val = cond-ret.val
         cond-sto = cond-ret.store
         if cond-val == numV(1):
-          interp-full-expr(sq, env, cond-sto)
+          interp-full-expr(sq, ie-env, cond-sto)
         else:
-          interp-full-expr(alt, env, cond-sto)
+          interp-full-expr(alt, ie-env, cond-sto)
         end
-#      | lookupE(r-e, fn) =>
-#        cases (Expr) r-e:
-#          | recordE(_) =>
-#            rec-ret = interp-full(r-e, env, ie-store)
-#            rec-val = rec-ret.val
-#            rec-sto = rec-ret.store
-#            result(lookup-field-helper(fn, rec-val.fields).value, rec-ret.store)
-#          | else =>
-#            oe-ret = interp-full(r-e, env, ie-store)
-#            oe-val = oe-ret.val
-#            oe-sto = oe-ret.store
-#            cases (Value) oe-val:
-#              | recV(f-l) =>
-#                result(lookup-field-helper(fn, f-l).value, oe-sto)
-#              | else =>
-#                raise("lookupE: input cannot be evaluated to a record value")
-#            end
-#        end
-#      | extendE(r-e, fn, nv) =>
-#        cases (Expr) r-e:
-#          | recordE(_) =>
-#            rec-ret = interp-full(r-e, env, ie-store)
-#            nv-ret = interp-full(nv, env, rec-ret.store)
-#            result(recV([fieldV(fn, nv-ret.val)] + rec-ret.val.fields), nv-ret.store)
-#          | else =>
-#            oe-ret = interp-full(r-e, env, ie-store)
-#            oe-val = oe-ret.val
-#            oe-sto = oe-ret.store
-#            cases (Value) oe-val:
-#              | recV(f-l) =>
-#                nv-ret = interp-full(nv, env, oe-sto)
-#                nv-val = nv-ret.val
-#                nv-sto = nv-ret.store
-#                result(recV([fieldV(fn, nv-val)] + f-l), nv-sto)
-#              | else =>
-#                raise("extendE: input cannot be evaluated to a record value")
-#            end
-#        end
-#      | appE(fun-e, arg-l) =>
-#        cases (Expr) fun-e:
-#          | lamE(_, _) =>
-#            app-ret = interp-full-expr(fun-e, ie-env, ie-store)
-#            app-val = app-ret.val
-#            app-sto = app-ret.store
-#            arg-ret = interp-full-expr-args(arg-l, app-val.params, env, app-sto)
-#            interp-full-expr(app-val.body, arg-ret.e, arg-ret.sto)
-#          | else =>
-#            oe-ret = interp-full-expr(fun-e, ie-env, ie-store)
-#            oe-val = oe-ret.val
-#            oe-sto = oe-ret.store
-#            cases (Value) oe-val:
-#              | funV(f-p-l, f-b, f-env) =>
-#                arg-ret = interp-full-expr-args(
-#                             arg-l, f-p-l, concat-env(f-env, env), oe-sto)
-#                interp-full(f-b, arg-ret.e, arg-ret.sto)
-#              | else =>
-#                raise("appE: " + fun-e + " cannot be evaluated to a function value")
-#            end
-#        end
+      | lookupE(r-e, fn) =>
+        cases (Expr) r-e:
+          | recordE(_) =>
+            rec-ret = interp-full-expr(r-e, ie-env, ie-store)
+            rec-val = rec-ret.val
+            rec-sto = rec-ret.store
+            result(lookup-field-helper(fn, rec-val.fields).value, rec-ret.store)
+          | else =>
+            oe-ret = interp-full-expr(r-e, ie-env, ie-store)
+            oe-val = oe-ret.val
+            oe-sto = oe-ret.store
+            cases (Value) oe-val:
+              | recV(f-l) =>
+                result(lookup-field-helper(fn, f-l).value, oe-sto)
+              | else =>
+                raise("lookupE: input cannot be evaluated to a record value")
+            end
+        end
+      | extendE(r-e, fn, nv) =>
+        cases (Expr) r-e:
+          | recordE(_) =>
+            rec-ret = interp-full-expr(r-e, ie-env, ie-store)
+            nv-ret = interp-full-expr(nv, ie-env, rec-ret.store)
+            result(recV([fieldV(fn, nv-ret.val)] + rec-ret.val.fields), nv-ret.store)
+          | else =>
+            oe-ret = interp-full-expr(r-e, ie-env, ie-store)
+            oe-val = oe-ret.val
+            oe-sto = oe-ret.store
+            cases (Value) oe-val:
+              | recV(f-l) =>
+                nv-ret = interp-full-expr(nv, ie-env, oe-sto)
+                nv-val = nv-ret.val
+                nv-sto = nv-ret.store
+                result(recV([fieldV(fn, nv-val)] + f-l), nv-sto)
+              | else =>
+                raise("extendE: input cannot be evaluated to a record value")
+            end
+        end
+      | idE(s) =>
+        result(fetch(lookup(s, ie-env), ie-store), ie-store)
+      | appE(fun-e, arg-l) =>
+        cases (Expr) fun-e:
+          | lamE(_, _) =>
+            app-ret = interp-full-expr(fun-e, ie-env, ie-store)
+            app-val = app-ret.val
+            app-sto = app-ret.store
+            arg-ret = interp-full-expr-args(arg-l, app-val.params, ie-env, app-sto)
+            interp-full-expr(app-val.body, arg-ret.e, arg-ret.sto)
+          | else =>
+            oe-ret = interp-full-expr(fun-e, ie-env, ie-store)
+            oe-val = oe-ret.val
+            oe-sto = oe-ret.store
+            cases (Value) oe-val:
+              | funV(f-p-l, f-b, f-env) =>
+                arg-ret = interp-full-expr-args(
+                             arg-l, f-p-l, concat-env(f-env, ie-env), oe-sto)
+                interp-full(f-b, arg-ret.e, arg-ret.sto)
+              | else =>
+                raise("appE: " + fun-e + " cannot be evaluated to a function value")
+            end
+        end
+    end
+  end
+  ##
+  # interp-full-stmt:
+  #
+  #   Interpret one specific type of statement at once.
+  #   For assign/defvar cases, it would lift the local variable to 
+  #   "outter" scope if necessary (identifier not exists in
+  #   the environment it can see).
+  #
+  fun interp-full-stmt(is-stmt :: Stmt, is-env :: Env, is-store :: Store):
+    fun is-exists(e-is-id :: String, e-is-env :: Env, e-is-store) -> Bool:
+      cases (Env) e-is-env:
+        | mt-env => false
+        | an-env(fn, loc, nxt-env) =>
+          if fn == e-is-id:
+            if not (fetch(loc, e-is-store) == nullV):
+              true
+            else:
+              false
+            end
+          else:
+            is-exists(e-is-id, nxt-env, e-is-store)
+          end
+      end
+    end
+    cases (Stmt) is-stmt:
+      | expr-stmt(e) =>
+        {
+          res: interp-full-expr(e, is-env, is-store),
+          env: is-env
+        }
+      | assign(id, e) =>
+        id-loc = gensym("loc:")
+        if is-exists(id, is-env, is-store):
+          exp-ret = interp-full-expr(e, is-env, is-store)
+          exp-val = exp-ret.val
+          exp-sto = exp-ret.store
+          {
+            res: result(exp-val, a-store(id-loc, exp-val, exp-sto)),
+            env: an-env(id, id-loc, is-env)
+          }
+        else:
+          {
+            res: result(nullV, a-store(id-loc, nullV, is-store)),
+            env: an-env(id, id-loc, is-env)
+          }
+        end
+      | defvar(id, e) =>
+        id-loc = gensym("loc:")
+        exp-ret = interp-full-expr(e, is-env, is-store)
+        exp-val = exp-ret.val
+        exp-sto = exp-ret.store
+        {
+          res: result(exp-val, a-store(id-loc, exp-val, exp-sto)),
+          env: an-env(id, id-loc, is-env)
+        }
+      | else =>
+        raise("unknown statement: " + is-stmt)
     end
   end
   ##
@@ -400,33 +461,30 @@ fun interp-full(prog :: Block, env :: Env, store :: Store) -> Result:
         is-stmt-l :: List<Stmt>,
         is-env :: Env,
         is-store :: Store) -> Result:
+    fun check-unbound(c-is-env :: Env, c-is-store :: Store, bound-ids :: Set<String>):
+      cases (Env) c-is-env:
+        | mt-env => nothing
+        | an-env(fn, loc, nxt-env) =>
+          if (not bound-ids.member(fn)) and (fetch(loc, c-is-store) == nullV):
+            raise("Referencing unbound identifier: " + fn)
+          else:
+            check-unbound(nxt-env, c-is-store, bound-ids.add(fn))
+          end
+      end
+    end
     cases (List<Stmt>) is-stmt-l:
       | link(stmt, nxt-stmts-l) =>
+        st-ret = interp-full-stmt(stmt, is-env, is-store)
+        st-res = st-ret.res
+        st-nen = st-ret.env
         if nxt-stmts-l == empty:
-          interp-full-stmt(stmt, env, store)
+          check-unbound(st-nen, st-res.store, set([]))
+          st-res
         else:
-          st-res = interp-full-stmt(stmt, env, store)
-          interp-full-stmts(nxt-stmts-l, env, st-res.store)
+          interp-full-stmts(nxt-stmts-l, st-nen, st-res.store)
         end
       | else =>
         raise("Contract violation: the input should never be empty list")
-    end
-  end
-  ##
-  # interp-full-stmt:
-  #
-  #   Interpret one specific type of statement at once.
-  #
-  fun interp-full-stmt(is-stmt :: Stmt, is-env :: Env, is-store :: Store) -> Result:
-    cases (Stmt) is-stmt:
-      | expr-stmt(e) =>
-        interp-full-expr(e, is-env, is-store)
-      | assign(n, e) =>
-        raise("unknown statement: " + is-stmt)
-      | defvar(n, e) =>
-        raise("unknown statement: " + is-stmt)
-      | else =>
-        raise("unknown statement: " + is-stmt)
     end
   end
   ##
@@ -618,4 +676,32 @@ where:
                         numE(1),
                         numE(0)))]))))]),
       mt-env)
+  #######################################################
+  # TC-RO: Record Operataion
+  #
+  eval('
+    (lookup (record (x 1) (y 3)) x)
+  ') is numV(1)
+  eval('
+    (lookup (extend (record (x 1) (y 3)) z 9) z)
+  ') is numV(9)
+  #######################################################
+  # TC-AD: Assign and Defvar Statments
+  #
+  eval('
+    (assign x 3)
+  ') raises ""
+  eval('
+    (assign x 3)
+    (defvar x 4)
+  ') is numV(4)
+  eval('
+    (defvar y (fun () x))
+    (defvar x 1)
+  ') is numV(1)
+  eval('
+    (defvar y (fun () x))
+    (defvar x 1)
+    (y)
+  ') is numV(1)
 end
