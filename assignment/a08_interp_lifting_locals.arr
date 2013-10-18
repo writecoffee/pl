@@ -148,7 +148,10 @@ fun interp-full(prog :: Block, env :: Env, store :: Store) -> Result:
   fun field-helper(fields :: List<Field>, f-env :: Env, f-store :: Store):
     cases (List<Field>) fields:
       | empty =>
-        {fv-l : [], sto : f-store}
+        {
+          fv-l: [],
+          sto: f-store
+        }
       | link(fe, nxt) =>
         e-ret = interp-full-expr(fe.value, f-env, f-store)
         e-val = e-ret.val
@@ -156,7 +159,10 @@ fun interp-full(prog :: Block, env :: Env, store :: Store) -> Result:
         nxt-ret = field-helper(nxt, f-env, e-sto)
         nxt-val = nxt-ret.fv-l
         nxt-sto = nxt-ret.sto
-        {fv-l : [fieldV(fe.name, e-val)] + nxt-val, sto : nxt-sto}
+        {
+          fv-l: [fieldV(fe.name, e-val)] + nxt-val,
+          sto: nxt-sto
+        }
     end
   end
   ##
@@ -279,19 +285,25 @@ fun interp-full(prog :: Block, env :: Env, store :: Store) -> Result:
       | empty =>
         cases (List<String>) params:
           | link(_, _) => raise("arity mismatch")
-          | empty => {e : h-arg-env, sto : h-arg-store}
+          | empty =>
+            {
+              e: h-arg-env,
+              sto: h-arg-store
+            }
         end
       | link(ae, a-nxt) =>
         cases (List<String>) params:
           | empty => raise("arity mismatch")
           | link(an, p-nxt) =>
-            arg-ret = interp-full(ae, h-arg-env, h-arg-store)
+            arg-ret = interp-full-expr(ae, h-arg-env, h-arg-store)
             arg-sto = arg-ret.store
             arg-val = arg-ret.val
             arg-loc = gensym("loc:")
             next-ret = interp-full-expr-args(a-nxt, p-nxt, h-arg-env, arg-sto)
-            {e : an-env(an, arg-loc, next-ret.e),
-             sto : a-store(arg-loc, arg-val, next-ret.sto)}
+            {
+              e: an-env(an, arg-loc, next-ret.e),
+              sto: a-store(arg-loc, arg-val, next-ret.sto)
+            }
         end
     end
   end
@@ -333,7 +345,7 @@ fun interp-full(prog :: Block, env :: Env, store :: Store) -> Result:
             rec-ret = interp-full-expr(r-e, ie-env, ie-store)
             rec-val = rec-ret.val
             rec-sto = rec-ret.store
-            result(lookup-field-helper(fn, rec-val.fields).value, rec-ret.store)
+            result(lookup-field-helper(fn, rec-val.fields).value, rec-sto)
           | else =>
             oe-ret = interp-full-expr(r-e, ie-env, ie-store)
             oe-val = oe-ret.val
@@ -366,7 +378,8 @@ fun interp-full(prog :: Block, env :: Env, store :: Store) -> Result:
             end
         end
       | idE(s) =>
-        result(fetch(lookup(s, ie-env), ie-store), ie-store)
+        res = result(fetch(lookup(s, ie-env), ie-store), ie-store)
+        res
       | appE(fun-e, arg-l) =>
         cases (Expr) fun-e:
           | lamE(_, _) =>
@@ -374,15 +387,19 @@ fun interp-full(prog :: Block, env :: Env, store :: Store) -> Result:
             app-val = app-ret.val
             app-sto = app-ret.store
             arg-ret = interp-full-expr-args(arg-l, app-val.params, ie-env, app-sto)
-            interp-full-expr(app-val.body, arg-ret.e, arg-ret.sto)
+            interp-full(app-val.body, arg-ret.e, arg-ret.sto)
           | else =>
             oe-ret = interp-full-expr(fun-e, ie-env, ie-store)
             oe-val = oe-ret.val
             oe-sto = oe-ret.store
             cases (Value) oe-val:
               | funV(f-p-l, f-b, f-env) =>
-                arg-ret = interp-full-expr-args(
-                             arg-l, f-p-l, concat-env(f-env, ie-env), oe-sto)
+                arg-ret = 
+                  interp-full-expr-args(
+                    arg-l,
+                    f-p-l,
+                    concat-env(ie-env, f-env),
+                    oe-sto)
                 interp-full(f-b, arg-ret.e, arg-ret.sto)
               | else =>
                 raise("appE: " + fun-e + " cannot be evaluated to a function value")
@@ -685,6 +702,18 @@ where:
   eval('
     (lookup (extend (record (x 1) (y 3)) z 9) z)
   ') is numV(9)
+  eval('
+    (lookup (record (x 1) (y 3)) not-exist-id)
+  ') raises "" # "record field: not-exist-id not found"
+  eval('
+    (extend (record (x 1) (y 3)) not-exist-id)
+  ') raises "" # "record field: not-exist-id not found"
+  eval('
+    (lookup (fun () 3) not-exist-id)
+  ') raises "" # "lookupE: input cannot be evaluated to a record value"
+  eval('
+    (extend "something not a record" z 9)
+  ') raises "" # "extendE: input cannot be evaluated to a record value"
   #######################################################
   # TC-AD: Assign and Defvar Statments
   #
@@ -704,4 +733,40 @@ where:
     (defvar x 1)
     (y)
   ') is numV(1)
+  eval('
+    (defvar my-record (record (x 1) (y 3)))
+    (lookup my-record x)
+  ') is numV(1)
+  eval('
+    (defvar my-record (record (x 1) (y 3)))
+    (lookup (extend my-record z 9) z)
+  ') is numV(9)
+  eval('
+    (defvar my-record (record (x 1) (y 3)))
+    ((fun (a1 a2)
+          (assign my-record (record (x 99) (y 999)))
+          (+ a1 (- a2 (lookup my-record x))))
+     0 0)
+  ') is numV(-99)
+  eval('
+    (defvar my-record (record (x 1) (y 3)))
+    (defvar my-func (fun (a1 a2 a3) (+ a1 (+ a2 a3))))
+    (defvar ur-record my-record)
+    (assign my-record (record (x 0) (y 999)))
+    (my-func (lookup my-record x)
+             (lookup ur-record x)
+             (lookup my-record y))
+  ') is numV(1000)
+  eval('
+    (defvar myFun 
+            (fun (x) (assign x 99)
+                     (assign x 77)))
+    (myFun 9)
+  ') is numV(77)
+  eval('
+    (defvar myFun 
+            (fun (x) (assign x 99)
+                     (defvar x 77)))
+    (myFun 9)
+  ') is numV(77)
 end
