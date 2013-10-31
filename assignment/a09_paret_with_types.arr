@@ -172,6 +172,32 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
         link(fieldT(f.name, ft), type-of-fields(f-nxt, f-tenv))
     end
   end
+  fun concat-tenv(tenv1 :: TypeEnv, tenv2 :: TypeEnv) -> TypeEnv:
+    cases (TypeEnv) tenv1:
+      | mt-tenv =>
+        tenv2
+      | a-tenv(e1-n, e1-t, e1-ext) =>
+        a-tenv(e1-n, e1-t, concat-tenv(e1-ext, tenv2))
+    end
+  end
+  fun type-of-parameters(p-l :: List<Binding>):
+    var lam-env :: TypeEnv = mt-tenv
+    fun retrieve-p-l-types(r-p-l :: List<Binding>) -> List<Type>:
+      cases (List<Binding>) r-p-l:
+        | empty =>
+          empty
+        | link(pb, pb-nxt) =>
+          pbn = pb.name
+          pbt = pb.type
+          lam-env := a-tenv(pbn, pbt, lam-env)
+          link(pbt, retrieve-p-l-types(pb-nxt))
+      end
+    end
+    {
+      env : lam-env,
+      tps : retrieve-p-l-types(p-l)
+    }
+  end
   cases (Expr) prog:
     | numE(n) =>
       numT
@@ -182,22 +208,48 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
       rt-ret = type-of-full(right, tenv)
       type-of-operation(op, lt-ret, rt-ret)
     | recordE(f-l) =>
-      recordT(type-of-fields(fields, tenv))
+      recordT(type-of-fields(f-l, tenv))
+    | lamE(p-l, body) =>
+      pt-ret = type-of-parameters(p-l)
+      pt-env = pt-ret.env
+      pt-tps = pt-ret.tps
+      funT(pt-tps, type-of-full(body, concat-tenv(pt-env, tenv)))
   end
 where:
   fun check-basic-value-types():
-    type-of('2') is numT
-    type-of('"I am a string"') is strT
-    type-of('(+ 2 3)') is numT
-    type-of('(- 2 3)') is numT
-    type-of('(== "str1" "str2")') is strT
-    type-of('(++ "str1" "str2")') is strT
-    type-of('(+ 2 "hI")') raises "illegal operands for binary operation"
-    type-of('(+ "not-a-num" 2)') raises "illegal operands for binary operation"
-    type-of('(== "not-a-num" 2)') raises "illegal operands for binary operation"
-    type-of('(== 2 "not-a-num")') raises "illegal operands for binary operation"
-    type-of('(++ "not-a-num" 2)') raises "illegal operands for binary operation"
-    type-of('(++ 2 "not-a-num")') raises "illegal operands for binary operation"
+    type-of('2')
+      is numT
+    type-of('"I am a string"')
+      is strT
+    type-of('(+ 2 3)')
+      is numT
+    type-of('(- 2 3)')
+      is numT
+    type-of('(== "str1" "str2")')
+      is strT
+    type-of('(++ "str1" "str2")')
+      is strT
+    type-of('(+ 2 "hI")')
+      raises "illegal operands for binary operation"
+    type-of('(+ "not-a-num" 2)')
+      raises "illegal operands for binary operation"
+    type-of('(== "not-a-num" 2)')
+      raises "illegal operands for binary operation"
+    type-of('(== 2 "not-a-num")')
+      raises "illegal operands for binary operation"
+    type-of('(++ "not-a-num" 2)')
+      raises "illegal operands for binary operation"
+    type-of('(++ 2 "not-a-num")')
+      raises "illegal operands for binary operation"
   end
-  check-basic-value-types()
+#  check-basic-value-types()
+  fun check-record-value-types():
+    type-of('(record (x 10) (y "hello"))')
+      is recordT([fieldT("x", numT), fieldT("y", strT)])
+  end
+#  check-record-value-types()
+  fun check-fun-value-types():
+    type-of('(fun ((x : num)) 3)') is funT([numT], numT)
+  end
+  check-fun-value-types()
 end
