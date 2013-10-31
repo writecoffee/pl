@@ -194,9 +194,21 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
       end
     end
     {
-      env : lam-env,
-      tps : retrieve-p-l-types(p-l)
+      tps : retrieve-p-l-types(p-l),
+      env : lam-env
     }
+  end
+  fun lookup-tenv(id-n :: String, id-tenv :: TypeEnv) -> Type:
+    cases (TypeEnv) id-tenv:
+      | mt-tenv =>
+        raise("unbound id: " +  id-n)
+      | a-tenv(n, t, nxt-tenv) =>
+        if n == id-n:
+          t
+        else:
+          lookup-tenv(id-n, nxt-tenv)
+        end
+    end
   end
   cases (Expr) prog:
     | numE(n) =>
@@ -214,6 +226,8 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
       pt-env = pt-ret.env
       pt-tps = pt-ret.tps
       funT(pt-tps, type-of-full(body, concat-tenv(pt-env, tenv)))
+    | idE(n) =>
+      lookup-tenv(n, tenv) 
   end
 where:
   fun check-basic-value-types():
@@ -249,7 +263,30 @@ where:
   end
 #  check-record-value-types()
   fun check-fun-value-types():
-    type-of('(fun ((x : num)) 3)') is funT([numT], numT)
+    type-of('
+      (fun ((x : num)) 3)
+    ') is funT([numT], numT)
+    type-of('
+      (fun ((x : num)) x)
+    ') is funT([numT], numT)
+    type-of('
+      (fun ((x : num) (y : str))
+           x)
+    ') is funT([numT, strT], numT)
+    type-of('
+      (fun ((x : (record (a num))))
+           x)
+    ') is funT([recordT([fieldT("a", numT)])],
+               recordT([fieldT("a", numT)]))
+    type-of('
+      (fun ((fun-parm : num -> num))
+           fun-parm)
+    ') is funT([numT], numT)
+    type-of('
+      (fun ((fun-parm : (str num -> num)))
+           fun-parm)
+    ') is funT([funT([strT, numT], numT)],
+               funT([strT, numT], numT))
   end
   check-fun-value-types()
 end
