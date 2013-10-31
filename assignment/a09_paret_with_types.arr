@@ -210,6 +210,36 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
         end
     end
   end
+  fun type-of-arguments(a-l :: List<Expr>, a-l-tenv :: TypeEnv)
+      -> List<Type>:
+    cases (List<Expr>) a-l:
+      | empty =>
+        empty
+      | link(e, nxt-e) =>
+        et = type-of-full(e, a-l-tenv)
+        link(et, type-of-arguments(nxt-e, a-l-tenv))
+    end
+  end
+  fun perform-argument-check(p-l :: List<Type>, a-l :: List<Type>):
+    if not (p-l.length() == a-l.length()):
+      raise("arity mismatch for function application")
+    else:
+      fun arg-check(c-p-l :: List<Type>, c-a-l :: List<Type>):
+        cases (List<Type>) c-p-l:
+          | empty => 
+            nothing
+          | link(t, nxt-t) =>
+            if t == c-a-l.first:
+              arg-check(nxt-t, c-a-l.rest)
+            else:
+              raise("type mismatch between argument and " +
+                    "parameter when applying function")
+            end
+        end
+      end
+      arg-check(p-l, a-l)
+    end
+  end
   cases (Expr) prog:
     | numE(n) =>
       numT
@@ -227,7 +257,26 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
       pt-tps = pt-ret.tps
       funT(pt-tps, type-of-full(body, concat-tenv(pt-env, tenv)))
     | idE(n) =>
-      lookup-tenv(n, tenv) 
+      lookup-tenv(n, tenv)
+    | appE(fun-e, arg-l) =>
+      cases (Expr) fun-e:
+        | lamE(_, _) =>
+          fun-t = type-of-full(fun-e, tenv)
+          arg-t-l = type-of-arguments(arg-l, tenv)
+          perform-argument-check(fun-t.params, arg-t-l)
+          fun-t.result
+# TODO: add test cases combined with let
+        | else =>
+          oe-t = type-of-full(fun-e, tenv)
+          cases (Type) oe-t:
+            | funT(_, _) =>
+              oe-t
+            | else =>
+              raise("cannot apply on non-func type")
+          end
+      end
+    | else =>
+      raise("unrecognizable expression")
   end
 where:
   fun check-basic-value-types():
@@ -256,12 +305,10 @@ where:
     type-of('(++ 2 "not-a-num")')
       raises "illegal operands for binary operation"
   end
-#  check-basic-value-types()
   fun check-record-value-types():
     type-of('(record (x 10) (y "hello"))')
       is recordT([fieldT("x", numT), fieldT("y", strT)])
   end
-#  check-record-value-types()
   fun check-fun-value-types():
     type-of('
       (fun ((x : num)) 3)
@@ -288,5 +335,22 @@ where:
     ') is funT([funT([strT, numT], numT)],
                funT([strT, numT], numT))
   end
-  check-fun-value-types()
+  fun check-application-types():
+    type-of('
+      ((fun ((x : num)) 3) 9)
+    ') is numT
+    type-of('
+      ((fun ((x : num) (y : num)) 3) 9 99)
+    ') is numT
+    type-of('
+      ((fun ((x : num)) 3) 9 77)
+    ') raises "arity mismatch for function application"
+    type-of('
+      ((fun ((x : num) (y : num)) 3) 9)
+    ') raises "arity mismatch for function application"
+  end
+#  check-basic-value-types()
+#  check-record-value-types()
+#  check-fun-value-types()
+  check-application-types()
 end
