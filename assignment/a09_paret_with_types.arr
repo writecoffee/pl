@@ -163,6 +163,15 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
         get-type(is-str-type)
     end
   end
+  fun type-of-fields(f-l :: List<Field>, f-tenv :: TypeEnv) -> List<FieldType>:
+    cases (List<Field>) f-l:
+      | empty =>
+        empty
+      | link(f, f-nxt) =>
+        ft = type-of-full(f.value, f-tenv)
+        link(fieldT(f.name, ft), type-of-fields(f-nxt, f-tenv))
+    end
+  end
   cases (Expr) prog:
     | numE(n) =>
       numT
@@ -172,18 +181,23 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
       lt-ret = type-of-full(left, tenv)
       rt-ret = type-of-full(right, tenv)
       type-of-operation(op, lt-ret, rt-ret)
+    | recordE(f-l) =>
+      recordT(type-of-fields(fields, tenv))
   end
 where:
-  type-of('2') is numT
-  type-of('"I am a string"') is strT
-  type-of('(+ 2 3)') is numT
-  type-of('(- 2 3)') is numT
-  type-of('(== "str1" "str2")') is strT
-  type-of('(++ "str1" "str2")') is strT
-  type-of('(+ 2 "hI")') raises "illegal operands for binary operation"
-  type-of('(+ "not-a-num" 2)') raises "illegal operands for binary operation"
-  type-of('(== "not-a-num" 2)') raises "illegal operands for binary operation"
-  type-of('(== 2 "not-a-num")') raises "illegal operands for binary operation"
-  type-of('(++ "not-a-num" 2)') raises "illegal operands for binary operation"
-  type-of('(++ 2 "not-a-num")') raises "illegal operands for binary operation"
+  fun check-basic-value-types():
+    type-of('2') is numT
+    type-of('"I am a string"') is strT
+    type-of('(+ 2 3)') is numT
+    type-of('(- 2 3)') is numT
+    type-of('(== "str1" "str2")') is strT
+    type-of('(++ "str1" "str2")') is strT
+    type-of('(+ 2 "hI")') raises "illegal operands for binary operation"
+    type-of('(+ "not-a-num" 2)') raises "illegal operands for binary operation"
+    type-of('(== "not-a-num" 2)') raises "illegal operands for binary operation"
+    type-of('(== 2 "not-a-num")') raises "illegal operands for binary operation"
+    type-of('(++ "not-a-num" 2)') raises "illegal operands for binary operation"
+    type-of('(++ 2 "not-a-num")') raises "illegal operands for binary operation"
+  end
+  check-basic-value-types()
 end
