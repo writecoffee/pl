@@ -316,6 +316,20 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
         end
     end
   end
+  fun type-of-sequence(te-l :: List<Expr>, te-tenv :: TypeEnv) -> Type:
+    cases (List<Expr>) te-l:
+      | link(exp, nxt-expl) =>
+        expt = type-of-full(exp, te-tenv)
+        if nxt-expl.length() == 0:
+          expt
+        else:
+          type-of-sequence(nxt-expl, te-tenv)
+        end
+      | else =>
+# TODO: test empty list
+        raise("cannot typecheck an empty expression list")
+    end
+  end
   cases (Expr) prog:
     | numE(n) =>
       numT
@@ -351,6 +365,7 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
               raise("cannot apply on non-func type")
           end
       end
+# TODO: add test case for "let ((a : (record (a num))) ..."
     | letE(bind, expr, body) =>
       expt = type-of-full(expr, tenv)
       if not is-type-match(bind.type, expt):
@@ -372,6 +387,31 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
             | else =>
               raise("cannot lookup a non-record type")
           end
+      end
+    | extendE(rec, fn, new-value) =>
+      cases (Expr) rec:
+        | recordE(_) =>
+          rt = type-of-full(rec, tenv)
+          recordT([fieldT(fn, type-of-full(new-value, tenv))] + rt.fields)
+        | else =>
+          oe-t = type-of-full(rec, tenv)
+          cases (Type) oe-t:
+            | recordT(_) =>
+              recordT([fieldT(fn, type-of-full(new-value))] + oe-t.fields)
+# TODO: add test case non-record type
+            | else =>
+              raise("cannot lookup a non-record type")
+          end
+      end
+    | doE(exp-l) =>
+      type-of-sequence(exp-l, tenv)
+    | assignE(name, expr) =>
+      org-t = lookup-tenv(name, tenv)
+      new-t = type-of-full(expr, tenv)
+      if not is-type-match(org-t, new-t):
+        raise("assignment mismatch")
+      else:
+        new-t
       end
     | else =>
       raise("unrecognizable expression")
@@ -435,6 +475,9 @@ where:
     type-of('
       (lookup (record (x 10) (y "hello")) z)
     ') raises "record lookup failure"
+    type-of('
+      (lookup (extend (record (x 10) (y "hello")) z 99) z)
+    ') is numT
   end
   fun check-fun-value-types():
     type-of('
@@ -498,9 +541,34 @@ where:
            ((fun ((a : str)) a) "cover you"))
     ') raises "let mismatching"
   end
-  check-basic-value-types()
-  check-record-value-types()
-  check-fun-value-types()
-  check-application-types()
-  check-let-types()
+  fun check-do-types():
+    type-of('
+      (do 3 "string" 9)
+    ') is numT
+  end
+  fun check-assign-types():
+    type-of('
+      (let ((a : num) 9)
+           (assign a 77))
+    ') is numT
+    type-of('
+      (lookup
+        (let ((a : (record (x num))) (record (x 77)))
+             (assign a (record (x 100) (y "new-string"))))
+        y)
+    ') is strT
+    type-of('
+      (lookup
+        (let ((a : (record (x num) (y str))) (record (x 77) (y "string")))
+             (assign a (record (x 100) (y 77))))
+        y)
+    ') raises "assignment mismatch"
+  end
+#  check-basic-value-types()
+#  check-record-value-types()
+#  check-fun-value-types()
+#  check-application-types()
+#  check-let-types()
+#  check-do-types()
+  check-assign-types()
 end
