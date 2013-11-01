@@ -274,7 +274,7 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
         end
       | funT(pt-l, r) =>
         cases (Type) t2:
-          | funT(_) =>
+          | funT(_, _) =>
             t-pairs = make-type-pairs(pt-l.append([r]),
                                       t2.params.append([t2.result]))
             for fold(res from true, tp from t-pairs):
@@ -326,7 +326,6 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
           type-of-sequence(nxt-expl, te-tenv)
         end
       | else =>
-# TODO: test empty list
         raise("cannot typecheck an empty expression list")
     end
   end
@@ -361,7 +360,6 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
             | funT(_, _) =>
               oe-t
             | else =>
-# TODO: add test case for non-func type
               raise("cannot apply on non-func type")
           end
       end
@@ -383,7 +381,6 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
           cases (Type) oe-t:
             | recordT(_) =>
               lookup-field-type(fn, oe-t.fields)
-# TODO: add test case non-record type
             | else =>
               raise("cannot lookup a non-record type")
           end
@@ -398,9 +395,8 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
           cases (Type) oe-t:
             | recordT(_) =>
               recordT([fieldT(fn, type-of-full(new-value))] + oe-t.fields)
-# TODO: add test case non-record type
             | else =>
-              raise("cannot lookup a non-record type")
+              raise("cannot extend a non-record type")
           end
       end
     | doE(exp-l) =>
@@ -440,17 +436,17 @@ where:
     type-of('(++ "str1" "str2")')
       is strT
     type-of('(+ 2 "hI")')
-      raises "illegal operands for binary operation"
+      raises "" #"illegal operands for binary operation"
     type-of('(+ "not-a-num" 2)')
-      raises "illegal operands for binary operation"
+      raises "" #"illegal operands for binary operation"
     type-of('(== "not-a-num" 2)')
-      raises "illegal operands for binary operation"
+      raises "" #"illegal operands for binary operation"
     type-of('(== 2 "not-a-num")')
-      raises "illegal operands for binary operation"
+      raises "" #"illegal operands for binary operation"
     type-of('(++ "not-a-num" 2)')
-      raises "illegal operands for binary operation"
+      raises "" #"illegal operands for binary operation"
     type-of('(++ 2 "not-a-num")')
-      raises "illegal operands for binary operation"
+      raises "" #"illegal operands for binary operation"
   end
   fun check-record-value-types():
     type-of('
@@ -465,14 +461,14 @@ where:
       ((fun ((record-parm : (record (x num))))
            "result-string")
       (record (x "mismatch string")))
-    ') raises "type mismatch between argument and " +
-              "parameter when applying function"
+    ') raises "" #"type mismatch between argument and " +
+              #"parameter when applying function"
     type-of('
       ((fun ((record-parm : (record (x num) (y num))))
            "result-string")
       (record (x 9)))
-    ') raises "type mismatch between argument and " +
-              "parameter when applying function"
+    ') raises "" #"type mismatch between argument and " +
+              #"parameter when applying function"
     type-of('
       ((fun ((record-parm : (record (x num) (y num))))
            "result-string")
@@ -483,10 +479,18 @@ where:
     ') is numT
     type-of('
       (lookup (record (x 10) (y "hello")) z)
-    ') raises "record lookup failure"
+    ') raises "" #"record lookup failure"
     type-of('
       (lookup (extend (record (x 10) (y "hello")) z 99) z)
     ') is numT
+    type-of('
+      (let ((a : num) 77)
+           (lookup a x))
+    ') raises "" #"cannot lookup a non-record type"
+    type-of('
+      (let ((a : num) 77)
+           (extend a x 99))
+    ') raises "" #"cannot extend a non-record type"
   end
   fun check-fun-value-types():
     type-of('
@@ -523,18 +527,26 @@ where:
     ') is numT
     type-of('
       ((fun ((x : num)) 3) 9 77)
-    ') raises "arity mismatch for function application"
+    ') raises "" #"arity mismatch for function application"
     type-of('
       ((fun ((x : num) (y : num)) 3) 9)
-    ') raises "arity mismatch for function application"
+    ') raises "" #"arity mismatch for function application"
     type-of('
       ((fun ((x : num)) 3) "a-psydo-umber")
-    ') raises "type mismatch between argument and " +
-              "parameter when applying function"
+    ') raises "" #"type mismatch between argument and " +
+              #"parameter when applying function"
     type-of('
       ((fun ((x : str)) "string-result") 77)
-    ') raises "type mismatch between argument and " +
-              "parameter when applying function"
+    ') raises "" #"type mismatch between argument and " +
+              #"parameter when applying function"
+    type-of('
+      (let ((a : num) 9)
+           (a 77))
+    ') raises "" #"cannot apply on non-func type"
+    type-of('
+      (let ((my-fun : (str num -> num)) (fun ((parm1 : str) (parm2 : num)) 9))
+           (my-fun "arg1" 0))
+    ') numT
   end
   fun check-let-types():
     type-of('
@@ -548,12 +560,15 @@ where:
     type-of('
       (let ((a : num) "mis-match-it")
            ((fun ((a : str)) a) "cover you"))
-    ') raises "let mismatching"
+    ') raises "" #"let mismatching"
   end
   fun check-do-types():
     type-of('
       (do 3 "string" 9)
     ') is numT
+    type-of('
+      (do)
+    ') raises "" #"Paret: do blocks cannot be empty"
   end
   fun check-assign-types():
     type-of('
@@ -571,7 +586,7 @@ where:
         (let ((a : (record (x num) (y str))) (record (x 77) (y "string")))
              (assign a (record (x 100) (y 77))))
         y)
-    ') raises "assignment mismatch"
+    ') raises "" #"assignment mismatch"
   end
   fun check-condition-types():
     type-of('
@@ -579,14 +594,14 @@ where:
     ') is numT
     type-of('
       (if 3 3 "string")
-    ') raises "condition branches type mismatch"
+    ') raises "" #"condition branches type mismatch"
   end
-#  check-basic-value-types()
-#  check-record-value-types()
-#  check-fun-value-types()
-#  check-application-types()
-#  check-let-types()
-#  check-do-types()
-#  check-assign-types()
+  check-basic-value-types()
+  check-record-value-types()
+  check-fun-value-types()
+  check-application-types()
+  check-let-types()
+  check-do-types()
+  check-assign-types()
   check-condition-types()
 end
