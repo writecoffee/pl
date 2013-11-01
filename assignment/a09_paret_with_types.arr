@@ -413,6 +413,15 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
       else:
         new-t
       end
+    | cifE(cond, consq, altern) =>
+      type-of-full(cond, tenv)
+      conq-t = type-of-full(consq, tenv)
+      altr-t = type-of-full(altern, tenv)
+      if not is-type-match(conq-t, altr-t):
+        raise("condition branches type mismatch")
+      else:
+        conq-t
+      end
     | else =>
       raise("unrecognizable expression")
   end
@@ -564,11 +573,20 @@ where:
         y)
     ') raises "assignment mismatch"
   end
+  fun check-condition-types():
+    type-of('
+      (if 3 3 7)
+    ') is numT
+    type-of('
+      (if 3 3 "string")
+    ') raises "condition branches type mismatch"
+  end
 #  check-basic-value-types()
 #  check-record-value-types()
 #  check-fun-value-types()
 #  check-application-types()
 #  check-let-types()
 #  check-do-types()
-  check-assign-types()
+#  check-assign-types()
+  check-condition-types()
 end
