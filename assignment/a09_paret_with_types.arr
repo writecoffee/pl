@@ -155,6 +155,7 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
     cases (Operator) op:
       | plus =>
         get-type(is-num-type)
+        get-type(is-num-type)
       | minus =>
         get-type(is-num-type)
       | append =>
@@ -339,6 +340,13 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
               raise("cannot apply on non-func type")
           end
       end
+    | letE(bind, expr, body) =>
+      expt = type-of-full(expr, tenv)
+      if not is-type-match(bind.type, expt):
+        raise("let mismatching")
+      else:
+        type-of-full(body, a-tenv(bind.name, bind.type, tenv))
+      end
     | else =>
       raise("unrecognizable expression")
   end
@@ -444,8 +452,19 @@ where:
     ') raises "type mismatch between argument and " +
               "parameter when applying function"
   end
-  check-basic-value-types()
-  check-record-value-types()
-  check-fun-value-types()
-  check-application-types()
+  fun check-let-types():
+    type-of('
+      (let ((a : num) 9)
+           (+ a 10))
+    ') is numT
+    type-of('
+      (let ((a : num) 9)
+           ((fun ((a : str)) a) "cover you"))
+    ') is strT
+  end
+#  check-basic-value-types()
+#  check-record-value-types()
+#  check-fun-value-types()
+#  check-application-types()
+  check-let-types()
 end
