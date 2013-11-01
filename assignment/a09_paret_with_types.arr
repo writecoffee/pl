@@ -220,6 +220,70 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
         link(et, type-of-arguments(nxt-e, a-l-tenv))
     end
   end
+  ##
+  # Helper Function: is-type-match
+  #
+  #   This routine is used for checking two types are exactly the same.
+  #   For funT case, it requires all paramter pairs are of the same type.
+  #   The same rule applies to their result type; for recordT case, it
+  #   requires the second recordE's fieldE list contains the one of
+  #   the first recordE.
+  #
+  fun is-type-match(t1 :: Type, t2 :: Type) -> Bool:
+    fun make-type-pairs(p1-l :: List<Type>, p2-l :: List<Type>):
+      cases (List<Type>) p1-l:
+        | empty => empty
+        | link(t, nxt-t) =>
+          link({t1 : t, t2 : p2-l.first},
+               make-type-pairs(nxt-t, p2-l.rest))
+      end 
+    end
+    fun is-record-contains-field(f :: FieldType, f-l :: List<Field>) -> Bool:
+      cases (List<Field>) f-l:
+        | empty => false
+        | link(tf, nxt-tf) =>
+          if (tf.name == f.name):
+            if is-type-match(tf.type, f.type):
+              true
+            else:
+              false
+            end
+          else:
+            is-record-contains-field(f, nxt-tf)
+          end
+      end
+    end
+    cases (Type) t1:
+      | numT =>
+        t1 == t2
+      | strT =>
+        t1 == t2
+      | recordT(ft-l) =>
+        cases (Type) t2:
+          | recordT(_) =>
+            if ft-l.length() > t2.fields.length():
+              false
+            else:
+              for fold(res from true, pft from ft-l):
+                res and is-record-contains-field(pft, t2.fields)
+              end
+            end
+          | else =>
+            false
+        end
+      | funT(pt-l, r) =>
+        cases (Type) t2:
+          | funT(_) =>
+            t-pairs = make-type-pairs(pt-l.append([r]),
+                                      t2.params.append([t2.result]))
+            for fold(res from true, tp from t-pairs):
+              res and is-type-match(tp.t1, tp.t2)
+            end
+          | else =>
+            false
+        end
+    end
+  end
   fun perform-argument-check(p-l :: List<Type>, a-l :: List<Type>):
     if not (p-l.length() == a-l.length()):
       raise("arity mismatch for function application")
@@ -229,7 +293,7 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
           | empty => 
             nothing
           | link(t, nxt-t) =>
-            if t == c-a-l.first:
+            if is-type-match(t, c-a-l.first):
               arg-check(nxt-t, c-a-l.rest)
             else:
               raise("type mismatch between argument and " +
@@ -306,8 +370,31 @@ where:
       raises "illegal operands for binary operation"
   end
   fun check-record-value-types():
-    type-of('(record (x 10) (y "hello"))')
-      is recordT([fieldT("x", numT), fieldT("y", strT)])
+    type-of('
+      (record (x 10) (y "hello"))
+    ') is recordT([fieldT("x", numT), fieldT("y", strT)])
+    type-of('
+      ((fun ((record-parm : (record (x num))))
+           "result-string")
+      (record (x 99)))
+    ') is strT
+    type-of('
+      ((fun ((record-parm : (record (x num))))
+           "result-string")
+      (record (x "mismatch string")))
+    ') raises "type mismatch between argument and " +
+              "parameter when applying function"
+    type-of('
+      ((fun ((record-parm : (record (x num) (y num))))
+           "result-string")
+      (record (x 9)))
+    ') raises "type mismatch between argument and " +
+              "parameter when applying function"
+    type-of('
+      ((fun ((record-parm : (record (x num) (y num))))
+           "result-string")
+      (record (y 9) (x 77) (z "extra-string")))
+    ') is strT
   end
   fun check-fun-value-types():
     type-of('
@@ -348,9 +435,17 @@ where:
     type-of('
       ((fun ((x : num) (y : num)) 3) 9)
     ') raises "arity mismatch for function application"
+    type-of('
+      ((fun ((x : num)) 3) "a-psydo-umber")
+    ') raises "type mismatch between argument and " +
+              "parameter when applying function"
+    type-of('
+      ((fun ((x : str)) "string-result") 77)
+    ') raises "type mismatch between argument and " +
+              "parameter when applying function"
   end
-#  check-basic-value-types()
-#  check-record-value-types()
-#  check-fun-value-types()
+  check-basic-value-types()
+  check-record-value-types()
+  check-fun-value-types()
   check-application-types()
 end
