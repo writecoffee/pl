@@ -305,6 +305,17 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
       arg-check(p-l, a-l)
     end
   end
+  fun lookup-field-type(lk-fn :: String, lk-ft-l :: List<FieldType>):
+    cases (List<FieldType>) lk-ft-l:
+      | empty => raise("record lookup failure")
+      | link(ft, nxt-ft-l) =>
+        if ft.name == lk-fn:
+          ft.type
+        else:
+          lookup-field-type(lk-fn, nxt-ft-l)
+        end
+    end
+  end
   cases (Expr) prog:
     | numE(n) =>
       numT
@@ -330,13 +341,13 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
           arg-t-l = type-of-arguments(arg-l, tenv)
           perform-argument-check(fun-t.params, arg-t-l)
           fun-t.result
-# TODO: add test cases combined with let
         | else =>
           oe-t = type-of-full(fun-e, tenv)
           cases (Type) oe-t:
             | funT(_, _) =>
               oe-t
             | else =>
+# TODO: add test case for non-func type
               raise("cannot apply on non-func type")
           end
       end
@@ -346,6 +357,21 @@ fun type-of-full(prog :: Expr, tenv :: TypeEnv) -> Type:
         raise("let mismatching")
       else:
         type-of-full(body, a-tenv(bind.name, bind.type, tenv))
+      end
+    | lookupE(rec, fn) =>
+      cases (Expr) rec:
+        | recordE(_) =>
+          rt = type-of-full(rec, tenv)
+          lookup-field-type(fn, rt.fields)
+        | else =>
+          oe-t = type-of-full(rec, tenv)
+          cases (Type) oe-t:
+            | recordT(_) =>
+              lookup-field-type(fn, oe-t.fields)
+# TODO: add test case non-record type
+            | else =>
+              raise("cannot lookup a non-record type")
+          end
       end
     | else =>
       raise("unrecognizable expression")
@@ -403,6 +429,12 @@ where:
            "result-string")
       (record (y 9) (x 77) (z "extra-string")))
     ') is strT
+    type-of('
+      (lookup (record (x 10) (y "hello")) x)
+    ') is numT
+    type-of('
+      (lookup (record (x 10) (y "hello")) z)
+    ') raises "record lookup failure"
   end
   fun check-fun-value-types():
     type-of('
@@ -461,10 +493,14 @@ where:
       (let ((a : num) 9)
            ((fun ((a : str)) a) "cover you"))
     ') is strT
+    type-of('
+      (let ((a : num) "mis-match-it")
+           ((fun ((a : str)) a) "cover you"))
+    ') raises "let mismatching"
   end
-#  check-basic-value-types()
-#  check-record-value-types()
-#  check-fun-value-types()
-#  check-application-types()
+  check-basic-value-types()
+  check-record-value-types()
+  check-fun-value-types()
+  check-application-types()
   check-let-types()
 end
