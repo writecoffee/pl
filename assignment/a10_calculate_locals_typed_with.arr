@@ -362,7 +362,7 @@ where:
           (fun ((fun-parm : num -> num) (rec-parm : (record (x num) (y num))))
                (fun ((fun-parm : num str str -> num))
                     (lookup @ y)))
-        ') is set(["rec-parm"])
+        ') is set(["fun-parm", "rec-parm"])
         parse-and-calculate-locals('
           (fun ((fun-parm : num -> num) (rec-parm : (record (x num) (y num))))
                (fun ((rec-parm : (record (x-shadowed num) (y-shadowed num))))
@@ -466,11 +466,38 @@ where:
     ') is set["x", "y", "my-rec"]
     parse-and-calculate-locals('
       (let ((my-rec : (record (x str) (y str)))
-            (record (x "x-value") (y "y-value") (z-unused @)))
+            (record (x "x-value") (y "y-value") (z-unused "z-unused-value")))
            (with @
                  (record (x str) (y str))
                  "do-nothing"))
     ') is set["my-rec"]
+    parse-and-calculate-locals('
+      (let ((my-rec : (record (x str) (y str)))
+            (record (x "x-value") (y "y-value") (z-unused @)))
+           (with my-rec
+                 (record (x str) (y str))
+                 "do-nothing"))
+    ') is set[]
+    parse-and-calculate-locals('
+      (let ((my-rec : (record (x str) (y str)))
+            (record (x "x-value") (y "y-value") (z-unused "z-unused-value")))
+           (with my-rec
+                 (record (x str) (y str))
+                 (extend my-rec @ "random-value")))
+    ') is set["my-rec"]                           # for extend or create a new record,
+                                                  # the id-hole could be filled by
+                                                  # any identifier in the id-env
+    parse-and-calculate-locals('
+      (let ((my-rec : (record (x str) (y str)))
+            (record (x "x-value") (y "y-value") (z-unused "z-unused-value")))
+           (with my-rec
+                 (record (x str) (y str))
+                 (do (assign my-rec (extend my-rec z "z-value"))
+                     (with my-rec
+                           (record (x str) (y str) (z str))
+                           @))))
+    ') is set["my-rec", "x", "y", "z"]            # after several times of supplementing
+                                                  # the scope, no duplicate id occurs
   end
   fun check-do():
     parse-and-calculate-locals('
@@ -479,8 +506,6 @@ where:
     parse-and-calculate-locals('
       (do @ "string" 99)
     ') is set[]
-    # TODO: Think twice for this
-    # tricky case before implementation!
     parse-and-calculate-locals('
       (let ((my-rec : (record (x str))) (record (x "x-value")))
            (do (assign my-rec 
@@ -493,6 +518,28 @@ where:
                                                    # stick with the new type
                      @)))
     ') is set["my-rec", "x", "y-extra"]
+    parse-and-calculate-locals('
+      (let ((my-rec : (record (x str))) (record (x "x-value")))
+           (do (assign my-rec 
+                       (record (x "x-new-value")
+                               (y-extra "y-extra-value")))
+               (with my-rec 
+                     (record (x str)
+                             (y-extra str))
+                     (assign my-rec
+                             (record (x "x-new-new-value")
+                                     (y-extra @))))))
+    ') is set["my-rec", "x", "y-extra"]            # if chosen "y-extra", the new "y-extra"
+                                                   # identifier would just refer to itself
+    parse-and-calculate-locals('
+      (let ((my-rec : (record (x str))) (record (x "x-value")))
+           (do (assign my-rec 
+                       (record (x "x-new-value")
+                               (y-extra "y-extra-value")))
+               (lookup my-rec @)))                 # id-env shouldn't be taken into
+                                                   # account in this case, because
+                                                   # it is unbound to the record "my-rec"
+    ') is set["x", "y-extra"]
   end
   fun check-assign():
     parse-and-calculate-locals('
@@ -503,8 +550,6 @@ where:
       (let ((x : num) 9)
            (assign x @))
     ') is set["x"]
-    # TODO: Think twice for this
-    # tricky case before implementation!
     parse-and-calculate-locals('
       (lookup (let ((my-record : (record (x str))) (record (x "x-value")))
                    (assign my-record
@@ -525,7 +570,9 @@ where:
                            (record (x "x-new-value")
                                    (y-extra @))))
               y-extra)
-    ') is set["my-record"]
+    ') is set["my-record"]                        # this could form a recursive data
+                                                  # y-extra : my-record -> my-record
+                                                  # (which contains y-extra)
   end
   check-base-case()
   check-record()
