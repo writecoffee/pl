@@ -159,7 +159,7 @@ fun calculate-locals(expr :: Expr) -> Set<String>:
   end
   scan-expr(expr, set([]))
 where:
-  fun check-base-case()
+  fun check-base-case():
     parse-and-calculate-locals('
       0
     ') is set([])
@@ -212,11 +212,37 @@ where:
       (fun ((@ : num)) 99)
     ') is set([])
     parse-and-calculate-locals('
-      (fun ((x : num) (@ : num) 99))
+      (fun ((x : num) (@ : num)) 99)
     ') is set([])
   end
-  fun check-record-related():
-    fun check-record-with-lookup():
+  fun check-record():
+    fun check-record-lookup():
+      fun check-record-lookup-nested():
+        parse-and-calculate-locals('
+          (lookup (record (x 10)
+                          (y-nested (record (z-nested-nested "z-nested-nested-value"))))
+           @)
+        ') is set(["x", "y-nested", "z-nested-nested"])
+        parse-and-calculate-locals('
+          (lookup (record (x 10)
+                          (y-nested (record (@ "z-nested-nested-value"))))
+           y-nested)
+        ') is set([])
+        parse-and-calculate-locals('
+          (lookup (record (x 10)
+                          (y (extend (record (z-nested "z-nested-value"))
+                                     m-nested-nested
+                                     "m-nested-nested-value")))
+           @)
+        ') is set(["x", "y", "z-nested", "m-nested-nested"])
+        parse-and-calculate-locals('
+          (lookup (record (x 10)
+                          (y (extend (record (@ "z-nested-nested-value"))
+                                     m-nested
+                                     "m-nested-value")))
+                  m-nested)
+        ') is set([])
+      end
       parse-and-calculate-locals('
         ((fun ((record-parm : (record (x num))))
               @)
@@ -239,17 +265,18 @@ where:
       ') is set([])
       parse-and-calculate-locals('
         (lookup (extend (record (x 10) (y "hello")) @ 99) y)
-      ') is set(["x", "y"])
+      ') is set([])
+      check-record-lookup-nested()
     end
     fun check-record-as-parameter():
       parse-and-calculate-locals('
         ((fun ((record-parm : (record (@ num))))
-             "result-string")
+              "result-string")
          (record (x 12)))
       ') is set([])
       parse-and-calculate-locals('
         ((fun ((record-parm : (record (@ num) (y num))))
-             "result-string")
+              "result-string")
          (record (x 12) (y 9)))
       ') is set([])
       parse-and-calculate-locals('
@@ -266,45 +293,45 @@ where:
     fun check-record-as-argument():
       parse-and-calculate-locals('
         ((fun ((record-parm : (record (x num) (y num))))
-             "result-string")
+              "result-string")
          (record (@ 9) (y 99)))
       ') is set([])
       parse-and-calculate-locals('
         ((fun ((record-parm : (record (x num) (y num))))
-             "result-string")
+              "result-string")
          (record (x 9) (@ 99)))
       ') is set([])
     end
-    fun check-record-nested-record():
-      parse-and-calculate-locals('
-        (lookup (record (x 10)
-                        (nested-rec-field (record (y "nested-rec-fvalue"))))
-         @)
-      ') is set(["x", "nested-rec-field"])
-      parse-and-calculate-locals('
-        (lookup (record (x 10)
-                        (nested-rec-field (record (@ "nested-rec-fvalue"))))
-         "dummy-return-string")
-      ') is set([])
-
-    end
     fun check-record-with-with():
       parse-and-calculate-locals('
-        (with (record (x 9)) (record (x num))
+        (with (record (x 9))
+              (record (x num))
               @)
       ') is set(["x"])
       parse-and-calculate-locals('
-        (with (record (x 9) (y "hello-y")) (record (x num) (y str))
+        (with (record (x 9) (y "hello-y"))
+              (record (x num) (y str))
               @)
       ') is set(["x", "y"])
+      parse-and-calculate-locals('
+        (with (record (x 9) (y-nested (record (z-nested-nested "z-nested-nested-value"))))
+              (record (x num) (y-nested (record (z-nested-nested str))))
+              @)
+      ') is set(["x", "y-nested", "z-nested-nested"])
+      parse-and-calculate-locals('
+        (with (record (x 9) (y-nested (extend (record (z-nested-nested "z-nested-nested-value"))
+                                              m-nested-nested-nested
+                                              "m-nested-nested-nested-value")))
+              (record (x num) (y-nested (record (z-nested-nested str) (m-nested-nested-nested str))))
+              @)
+      ') is set(["x", "y-nested", "z-nested-nested", "m-nested-nested-nested"])
     end
-    check-record-with-lookup()
+    check-record-lookup()
     check-record-as-parameter()
     check-record-as-argument()
     check-record-with-with()
-    check-record-nested-record()
   end
-  fun check-lambda-related():
+  fun check-lambda():
     fun check-lambda-basic():
       parse-and-calculate-locals('
         (fun ((@ : num)) 3)
@@ -312,9 +339,6 @@ where:
       parse-and-calculate-locals('
         (fun ((x : num) (y : str) (@ : str)) 3)
       ') is set([])
-      parse-and-calculate-locals('
-        (fun ((x : num)) @)
-      ') is set(["x"])
       parse-and-calculate-locals('
         (fun ((x : num)) @)
       ') is set(["x"])
@@ -327,7 +351,29 @@ where:
              @)
       ') is set(["fun-parm"])
     end
-    fun check-labmda-basic-record():
+    fun check-lambda-record():
+      fun check-lambda-record-nested():
+        parse-and-calculate-locals('
+          (fun ((fun-parm : num -> num) (rec-parm : (record (x num) (y num))))
+               (fun ((fun-parm : num str str -> num))
+                    @))
+        ') is set(["fun-parm", "rec-parm"])
+        parse-and-calculate-locals('
+          (fun ((fun-parm : num -> num) (rec-parm : (record (x num) (y num))))
+               (fun ((fun-parm : num str str -> num))
+                    (lookup @ y)))
+        ') is set(["rec-parm"])
+        parse-and-calculate-locals('
+          (fun ((fun-parm : num -> num) (rec-parm : (record (x num) (y num))))
+               (fun ((rec-parm : (record (x-shadowed num) (y-shadowed num))))
+                    (lookup rec-parm @)))
+        ') is set(["x-shadowed", "y-shadowed"])
+        parse-and-calculate-locals('
+          (fun ((fun-parm : num -> num) (rec-parm : (record (x num) (y num))))
+               (fun ((rec-parm : (record (x-shadowed num) (y-shadowed num))))
+                    (lookup (extend rec-parm z "hello-value") @)))
+        ') is set(["x-shadowed", "y-shadowed", "z"])
+      end
       parse-and-calculate-locals('
         (fun ((fun-parm : num -> num) (rec-parm : (record (x num) (y num))))
              @)
@@ -344,33 +390,148 @@ where:
         (fun ((fun-parm : num -> num) (rec-parm : (record (@ num) (y num))))
              (lookup rec-parm y))
       ') is set([])
-    end
-    fun check-lambda-nested-lambda-shadowing-record():
-      parse-and-calculate-locals('
-        (fun ((fun-parm : num -> num) (rec-parm : (record (x num) (y num))))
-             (fun ((fun-parm : num str str -> num))
-                  @))
-      ') is set(["fun-parm", "rec-parm"])
-      parse-and-calculate-locals('
-      parse-and-calculate-locals('
-        (fun ((fun-parm : num -> num) (rec-parm : (record (x num) (y num))))
-             (fun ((fun-parm : num str str -> num))
-                  (lookup @ y)))
-      ') is set(["rec-parm"])
-      parse-and-calculate-locals('
-        (fun ((fun-parm : num -> num) (rec-parm : (record (x num) (y num))))
-             (fun ((rec-parm : (record (shadow-x num) (shadow-y num))))
-                  (lookup rec-parm @)))
-      ') is set(["shadow-x", "shadow-y"])
-      parse-and-calculate-locals('
-        (fun ((fun-parm : num -> num) (rec-parm : (record (x num) (y num))))
-             (fun ((rec-parm : (record (shadow-x num) (shadow-y num))))
-                  (lookup (extend rec-parm new-z "hello-value") @)))
-      ') is set(["shadow-x", "shadow-y", "new-z"])
+      check-lambda-record-nested()
     end
     check-lambda-basic()
-    check-labmda-basic-record()
-    check-lambda-nested-lambda-shadowing-record()
+    check-lambda-record()
   end
-
+  fun check-cif():
+    parse-and-calculate-locals('
+      (if 1
+          @
+          "false-branch")
+    ') is set([])
+    parse-and-calculate-locals('
+      (if 0
+          "true-branch"
+          @)
+    ') is set([])
+    parse-and-calculate-locals('
+      (if 0
+          "true-branch"
+          @)
+    ') is set([])
+    parse-and-calculate-locals('
+      ((fun ((x : str) (y : str))
+            (if (== x y)
+                @
+                0))
+             "x-arg-value" "y-arg-value")
+    ') is set(["x", "y"])
+    parse-and-calculate-locals('
+      ((fun ((x : str) (y : str))
+            (if (== x y)
+                (fun ((x-nested-left : num) (y-nested-left : num))
+                     (+ x-nested-left @))
+                (fun ((x-nested-right : num) (y-nested-right : num))
+                     (* x-nested-right y-nested-right))))
+             "x-arg-value" "y-arg-value")
+    ') is set(["x", "y", "x-nested-left", "y-nested-left"])
+    parse-and-calculate-locals('
+      (with ((fun ((x : str) (y : str))
+                  (if (== x y)
+                      (record (m "m-left-value"))
+                      (record (m "m-right-value"))))
+              "x-value" "y-value")
+            (record (m str))
+            @)
+    ') is set(["m"])
+    parse-and-calculate-locals('
+      (with ((fun ((x : num) (y : num))
+                  (if (- x y)
+                      (if (+ x 1)
+                          (record (m "m-left-l-value"))
+                          (record (m "m-left-r-value")))
+                      (record (m "m-right-value"))))
+              "x-value" "y-value")
+            (record  (m str))
+            @)
+    ') is set(["m"])
+  end
+  fun check-let():
+    parse-and-calculate-locals('
+      (let ((x : num) 99)
+           @)
+    ') is set(["x"])
+    parse-and-calculate-locals('
+      (let ((x : num) 9)
+           ((fun ((x : str)) @) "cover you"))
+    ') is set(["x"])
+    parse-and-calculate-locals('
+      (let ((my-rec : (record (x str) (y str)))
+            (record (x "x-value") (y "y-value") (z-unused "z-unused-value")))
+           (with my-rec
+                 (record (x str) (y str))
+                 @))
+    ') is set["x", "y", "my-rec"]
+    parse-and-calculate-locals('
+      (let ((my-rec : (record (x str) (y str)))
+            (record (x "x-value") (y "y-value") (z-unused @)))
+           (with @
+                 (record (x str) (y str))
+                 "do-nothing"))
+    ') is set["my-rec"]
+  end
+  fun check-do():
+    parse-and-calculate-locals('
+      (do 3 "string" @)
+    ') is set[]
+    parse-and-calculate-locals('
+      (do @ "string" 99)
+    ') is set[]
+    # TODO: Think twice for this
+    # tricky case before implementation!
+    parse-and-calculate-locals('
+      (let ((my-rec : (record (x str))) (record (x "x-value")))
+           (do (assign my-rec 
+                       (record (x "x-new-value")
+                               (y-extra "y-extra-value")))
+               (with my-rec 
+                     (record (x str)
+                             (y-extra str))        # as my-rec has been type updated,
+                                                   # the record scope should be just
+                                                   # stick with the new type
+                     @)))
+    ') is set["my-rec", "x", "y-extra"]
+  end
+  fun check-assign():
+    parse-and-calculate-locals('
+      (let ((x : num) 9)
+           (assign @ 77))
+    ') is set["x"]
+    parse-and-calculate-locals('
+      (let ((x : num) 9)
+           (assign x @))
+    ') is set["x"]
+    # TODO: Think twice for this
+    # tricky case before implementation!
+    parse-and-calculate-locals('
+      (lookup (let ((my-record : (record (x str))) (record (x "x-value")))
+                   (assign my-record
+                           (record (x "x-new-value")
+                                   (y-extra "y-extra-value"))))
+              @)
+    ') is set["x", "y-extra"]
+    parse-and-calculate-locals('
+      (lookup (let ((my-record : (record (x str))) (record (x "x-value")))
+                   (assign my-record
+                           (record (x "x-new-value")
+                                   (@ "random-value"))))
+              x)
+    ') is set[]
+    parse-and-calculate-locals('
+      (lookup (let ((my-record : (record (x str))) (record (x "x-value")))
+                   (assign my-record
+                           (record (x "x-new-value")
+                                   (y-extra @))))
+              y-extra)
+    ') is set["my-record"]
+  end
+  check-base-case()
+  check-record()
+  check-lambda()
+  check-cif()
+  check-let()
+  check-do()
+  check-assign()
 end
