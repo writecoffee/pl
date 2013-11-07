@@ -134,27 +134,59 @@ end
 
 parse-and-calc = parse-and-calculate-locals
 fun calculate-locals(expr :: Expr) -> Set<String>:
-  fun scan-expr(se :: Expr, possible-ids :: Set<String>) -> Set<String>:
+  fun retrieve-field-ids(rec-type :: Type) -> Set<String>:
+    set([])
+  end
+  fun retrieve-binding-ids(params :: List<Binding>) -> Set<String>:
+    set([])
+  end
+  fun scan-expr(se :: Expr, id-env :: Set<String>) -> Set<String>:
     cases (Expr) se:
       | holeE =>
-        possible-ids
+        id-env
       | numE(n) =>
         set([])
       | strE(s) =>
         set([])
       | idE(s) =>
         set([])
+      | bopE(op, left, right) =>
+        left-ret = scan-expr(left, id-env)
+        right-ret = scan-expr(right, id-env)
+        left-ret.union(right-ret)
       | cifE(c, sq, alt) =>
-        cr = scan-expr(c, possible-ids)
-        sr = scan-expr(sq, possible-ids)
-        ar = scan-expr(alt, possible-ids)
+        cr = scan-expr(c, id-env)
+        sr = scan-expr(sq, id-env)
+        ar = scan-expr(alt, id-env)
         cr.union(sr).union(ar)
-      | lamE(p-l, body) =>
-        
+      | lamE(params, bd) =>
+        bids = retrieve-binding-ids(params)
+        scan-expr(bd, bids.union(id-env))
       | recordE(f-l) =>
         for fold(res from set([]), fie from f-l):
-          res.union(scan-expr(fie, possible-ids))
+          res.union(scan-expr(fie.value, id-env))
         end
+      | lookupE(rec, fn) =>
+        scan-expr(rec, id-env)
+      | extendE(rec, fn, fexp) =>
+        rec-ret = scan-expr(rec, id-env)
+        fexp-ret = scan-expr(fexp, id-env)
+        rec-ret.union(fexp-ret)
+      | assignE(name, exp) =>
+        scan-expr(exp, id-env)
+      | withE(ns, t, bd) =>
+        ns-ret = scan-expr(ns, id-env)
+        fids = retrieve-field-ids(t)
+        bd-ret = scan-expr(bd, fids.union(id-env))
+        ns-ret.union(bd-ret)
+      | doE(exp-l) =>
+        for fold(res from set([]), exp from exp-l):
+          res.union(scan-expr(exp, id-env))
+        end
+      | appE(func, args) =>
+        func-ret = scan-expr(func, id-env)
+        args-ret = scan-expr(args, id-env)
+        func-ret.union(args-ret)
     end
   end
   scan-expr(expr, set([]))
