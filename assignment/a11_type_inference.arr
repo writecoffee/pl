@@ -33,6 +33,29 @@ data Type:
   | conT(constr :: ConstrType, args :: List<Type>)
 end
 
+data BaseType:
+  | numT
+  | strT
+end
+
+data ConstrType:
+  | funT
+  | listT
+end
+
+data Term:
+  | tType(type :: Type)
+  | tExpr(expr :: Expr)
+end
+
+data Constraint:
+  | eqCon(lhs :: Term, rhs :: Term)
+end
+
+data Substitution:
+  | sub(v :: Term, w :: Term)
+end
+
 fun normalize(typ :: Type) -> Type:
   doc: "Put a type into a normal form, in which type variables are named sequentially."
   alphabet = "abcdefghijklmnopqrstuvwxyz"
@@ -69,15 +92,6 @@ fun same-type(t1 :: Type, t2 :: Type) -> Bool:
   normalize(t1) == normalize(t2)
 end
 
-data BaseType:
-  | numT
-  | strT
-end
-
-data ConstrType:
-  | funT
-  | listT
-end
 
 fun parse(prog) -> Expr:
   fun convert(sexpr):
@@ -130,40 +144,99 @@ fun parse(prog) -> Expr:
   convert(prog)
 end
 
-data Constraint:
-  | eqCon(lhs :: Type, rhs :: Type)
-end
-
-data Substitution:
-  | sub(v :: Expr, w :: Type)
-end
-
 ##
-# 
-# 
+# generate-constraints: 
+#     Constraint generation. It walks the program source, emitting appropriate
+#     constraints on each expression, and returns this SET of constraints, aka,
+#     the returned list should be interpreted as a set.
 #
 fun generate-constraints(exp :: Expr) -> List<Constraint>:
-  empty
+  cases (Expr) exp:
+    | numE(n) =>
+      [eqCon(tExpr(exp), tType(baseT(numT)))]
+    | idE(s) =>
+      [eqCon(tExpr(exp), tType(varT(s)))]
+    | else =>
+      raise("Other expression cases are not-yet-considered for constraints generation")
+  end
 where:
 
 end
 
 ##
+# lookup:
+#     It look-ups variable name against the substitution list.
 #
+fun lookup(exp-term :: Term, s-list :: List<Substitution>) -> Option:
+  none
+end
+
+##
+# extend-replace:
+#     Perform the occurs test and, if it fails (i.e., there is no circularity), 
+#     extends the substitution and replaces all existing instances of the first
+#     term with the second in the substitution.
 #
+fun extend-replace(lexp-term :: Term, rexp-term :: Term, s-list :: List<Substitution>) -> List<Substitution>:
+  [sub(lexp-term, rexp-term)] + s-list
+end
+
+##
+# unify:
+#     The goal of unification is to generate a substitution, or mapping from variables
+#     to terms that do not contain any variables. For a given constraint, the unifier
+#     examines the left-hand-side of the equation. It it is a variable, it is now ripe
+#     for elimination. The unifier adds the variable's right-hand-side to the substitution
+#     and, to truly eliminate it, replaces all occurrences of the variable in the
+#     substitution with this right-hand-side.
 #
-fun unify(c-list :: List<Constraint>) -> List<Substitution>:
-  nothing
+fun unify(c-list :: List<Constraint>, s-list :: List<Substitution>) -> List<Substitution>:
+  cases (List) c-list:
+    | empty =>
+      s-list
+    | link(c, c-l-nxt) =>
+      l = c-list.first.lhs
+      r = c-list.first.rhs
+      cases (Term) l:
+        | tExpr(e) =>
+          existence = lookup(l, s-list)
+          cases (Option) existence:
+            | none =>
+              extend-replace(l, r, s-list)
+          end
+      end
+  end
 where:
 
 end
 
 ##
-#
-#
+# type-infer:
+#     It traverses the substitution and find the types of all the expression in the program
+#     and then insert the type annotations accordingly.
 #
 fun type-infer(prog :: String) -> Type:
-
+  prog-exp = parse(read-sexpr(prog))
+  sub-list = unify(generate-constraints(prog-exp), [])
+  cases (List<Substitution>) sub-list:
+    | link(s, _) =>
+      cases (Substitution) s:
+        | sub(v, w) =>
+          cases (Term) v:
+            | tExpr(e) =>
+              if (e == prog-exp):
+                w.type
+              else:
+                nothing
+              end
+          end
+      end
+  end
 where:
-  
+  type-infer('3') satisfies same-type(_, baseT(numT))
+
+#  type-infer('
+#    (fun (x) x)
+#  ') satisfies same-type(_, conT(funT, [varT("q"), varT("p")]))
+
 end
