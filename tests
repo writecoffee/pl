@@ -1,0 +1,34 @@
+(let (my-id 3) my-id)
+
+eqCon(tExpr(letE("my-id", numE(3), idE("my-id"))), tExpr(idE("my-id")))
+eqCon(tExpr(idE("my-id")), tExpr(numE(3)))
+eqCon(tExpr(numE(3)), tType(baseT(numT)))
+
+(fun (my-param) my-param)
+
+eqCon(tExpr(lamE("my-param", idE("my-param"))), tType(conT(funT, [varT("a"), varT("b")])))
+eqCon(tType(varT("b"))
+
+(fun (my-param) un-bound)
+eqCon(tExpr(lamE("my-param", idE("my-param"))), tType(conT(funT, [varT("a"), varT("b")])))
+
+
+(fun (my-param) 3)
+
+eqCon(tExpr(lamE("my-param", idE("my-param"))), tType(conT(funT, [varT("a"), baseT(numT)])))
+
+(fun (my-param) link(2, empty))
+
+eqCon(tExpr(lamE("my-param", bopE(linkOp, numE(2), emptyE))), tType(conT(listT, [baseT(numT), conT(listT, [varT("a")])])))
+
+
+
+
+
+
+(fun (my-param) my-param)
+
+eqCon(tExpr(lamE("my-param", idE("my-param"))), tExpr(idE("my-param")))
+eqCon(tExpr(idE("my-param")), tType(varT("a")))
+eqCon(tExpr(idE("my-param")), tType(varT("b")))
+

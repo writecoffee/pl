@@ -154,8 +154,19 @@ fun generate-constraints(exp :: Expr) -> List<Constraint>:
   cases (Expr) exp:
     | numE(n) =>
       [eqCon(tExpr(exp), tType(baseT(numT)))]
-    | idE(s) =>
-      [eqCon(tExpr(exp), tType(varT(s)))]
+#    | idE(s) =>
+#      [eqCon(tExpr(exp), tType(varT(s)))]
+    | bopE(op, l, r) =>
+      cases (Operator) op:
+        | plus =>
+          l-c-list = generate-constraints(l)
+          r-c-list = generate-constraints(r)
+          lsub-constr = eqCon(tExpr(l), tType(baseT(numT)))
+          rsub-constr = eqCon(tExpr(r), tType(baseT(numT)))
+          glob-constr = eqCon(tExpr(exp), tType(baseT(numT)))
+        | else =>
+          raise("not-yet-considered operator")
+      end
     | else =>
       raise("Other expression cases are not-yet-considered for constraints generation")
   end
@@ -165,20 +176,65 @@ end
 
 ##
 # lookup:
-#     It look-ups variable name against the substitution list.
+#     It look-ups term against the substitution list. It would return the right hand side
+#     of the substitution instance if exp-term and the left hand side of the substitution
+#     matched.
 #
 fun lookup(exp-term :: Term, s-list :: List<Substitution>) -> Option:
-  none
+  cases (List<Substitution>) s-list:
+    | empty =>
+      none
+    | link(sub, sub-nxt) =>
+      if sub.v == exp-term:
+        sub.w
+      else:
+        lookup(exp-term, sub-nxt)
+      end
+  end
 end
 
 ##
-# extend-replace:
-#     Perform the occurs test and, if it fails (i.e., there is no circularity), 
-#     extends the substitution and replaces all existing instances of the first
-#     term with the second in the substitution.
+# extend:
+#     (Perform the occurs test and, if it fails (i.e., there is no circularity)); 
+#     extends the substitution list by constructing a new substitution pair.
 #
-fun extend-replace(lexp-term :: Term, rexp-term :: Term, s-list :: List<Substitution>) -> List<Substitution>:
+fun extend(lterm :: Term, rterm :: Term, s-list :: List<Substitution>) -> List<Substitution>:
   [sub(lexp-term, rexp-term)] + s-list
+end
+
+fun is-exp-term(term :: Term) -> Bool:
+  cases (Term) term:
+    | tExpr(_) =>
+      true
+    | else =>
+      false
+  end
+end
+
+##
+# replace:
+#     (Perform the occurs test and, if it fails (i.e., there is no circularity)); 
+#     replace all existing instances of the left term (lterm) with the right term (rterm)
+#     appeared in the substitution list.
+#
+fun replace(in-term :: Term, with-term :: Term, s-list :: List<Substitution>) -> List<Substitution>:
+  fun replace-helper(the-term :: Term) -> Term:
+    cases (Term) the-term:
+      | tExpr(expr) =>
+        
+      | tType(type) =>
+# TODO: keep an eye on the funT and listT
+        nothing
+    end
+  end
+  if not is-exp-term(in-term):
+    s-list
+  else:
+    for fold(result from [], sub from s-list):
+      l-old = sub.lhs 
+      r-old = sub.rhs
+      l-new = replace-helper(l-old, 
+  end
 end
 
 ##
@@ -202,7 +258,9 @@ fun unify(c-list :: List<Constraint>, s-list :: List<Substitution>) -> List<Subs
           existence = lookup(l, s-list)
           cases (Option) existence:
             | none =>
-              extend-replace(l, r, s-list)
+              extend(l, r, s-list)
+            | some(bound) =>
+              replace(l, bound, s-list)
           end
       end
   end
@@ -217,23 +275,11 @@ end
 #
 fun type-infer(prog :: String) -> Type:
   prog-exp = parse(read-sexpr(prog))
-  sub-list = unify(generate-constraints(prog-exp), [])
-  cases (List<Substitution>) sub-list:
-    | link(s, _) =>
-      cases (Substitution) s:
-        | sub(v, w) =>
-          cases (Term) v:
-            | tExpr(e) =>
-              if (e == prog-exp):
-                w.type
-              else:
-                nothing
-              end
-          end
-      end
-  end
+  cons-lst = generate-constraints(prog-exp)
+  sub-list = unify(cons-lst, [])
 where:
   type-infer('3') satisfies same-type(_, baseT(numT))
+  type-infer('(+ 3 4)') satisfies same-type(_, baseT(numT))
 
 #  type-infer('
 #    (fun (x) x)
