@@ -1,0 +1,225 @@
+(let (my-id 3) my-id)
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-id", numE(3), idE("my-id"))),
+      tLbdy(idE("my-id"), idE("my-id"), []))
+------------------------------
+eqCon(tExpr(idE("my-id")),
+      tBind(numE(3), []))
+eqCon(tExpr(numE(3))
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(idE("my-id")),
+      tType(varT("a")))
+
+=========================================================================
+
+(let (my-id 3) unbound)
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-id", numE(3), idE("my-id"))),
+      tLbdy(idE("my-id"), idE("unbound"), []))
+------------------------------
+eqCon(tExpr(idE("my-id")),
+      tBind(numE(3), []))
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(idE("unbound")),
+      tType(varT("a")))
+
+=========================================================================
+
+(let (my-id 3) 
+     (let my-shadow-id 99) unbound)
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-id", numE(3), letE("my-shadow-id", numE(99), idE("unbound")))),
+      tLbdy(idE("my-id"), letE("my-shadow-id", numE(99), idE("unbound")), []))
+------------------------------
+eqCon(tExpr(idE("my-id")),
+      tBind(numE(3), []))
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-shadow-id", numE(99), idE("unbound"))),
+      tLbdy(idE("my-shadow-id"), idE("unbound"), []))
+------------------------------
+eqCon(tExpr(idE("my-shadow-id")),
+      tBind(numE(99), []))
+eqCon(tExpr(numE(99)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(idE("unbound")),
+      tType(varT("b")))
+
+
+=========================================================================
+
+(let (my-id 3) 
+     (let my-shadow-id 99) my-id)
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-id", numE(3), letE("my-shadow-id", numE(99), idE("my-id")))),
+      tLbdy(idE("my-id"), letE("my-shadow-id", numE(99), idE("my-id")), []))
+------------------------------
+eqCon(tExpr(idE("my-id")),
+      tBind(numE(3), []))
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-shadow-id", numE(99), idE("my-id"))),
+      tLbdy(idE("my-shadow-id"), idE("my-id"), []))
+------------------------------
+eqCon(tExpr(idE("my-shadow-id")),
+      tBind(numE(99), []))
+eqCon(tExpr(numE(99)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(idE("my-id")),
+      tType(varT("b")))
+
+=========================================================================
+
+(let (my-id (+ 77 3)) 
+     (let my-shadow-id 99) my-id)
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-id",
+                 bopE(plusOp, numE(77), numE(3)),
+                 letE("my-shadow-id", numE(99), idE("my-id")))),
+      tLbdy(idE("my-id"), letE("my-shadow-id", numE(99), idE("my-id")), []))
+------------------------------
+eqCon(tExpr(idE("my-id")),
+      tBind(bopE(plusOp, numE(77),numE(3))), [])
+eqCon(tExpr(bopE(plusOp, numE(77),numE(3))),
+      tBbop(numT, [numE(77), numE(3)], []))
+eqCon(tExpr(numE(77)),
+      tType(baseT(numT)))
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-shadow-id",
+                 numE(99),
+                 idE("my-id"))),
+      tLbdy(idE("my-shadow-id"),
+            idE("my-id"),
+            []))
+------------------------------
+eqCon(tExpr(idE("my-shadow-id")),
+      tBind(numE(99), []))
+eqCon(tExpr(numE(99)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(idE("my-id")),
+      tType(varT("b")))
+
+=========================================================================
+
+(let (my-id 3) 
+     (let (my-shadow-id (+ 88 77))
+          my-id))
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-id",
+                 numE(3),
+                 letE("my-shadow-id",
+                      binOp(plusOp, numE(88), numE(77)),
+                      idE("my-id")))),
+      tLbdy(idE("my-id"),
+            letE("my-shadow-id",
+                 bopE(plusOp, numE(88), numE(77)),
+                 idE("my-id"))
+            []))
+------------------------------
+eqCon(tExpr(idE("my-id")),
+      tBind(numE(3), []))
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-shadow-id",
+                 bopE(plusOp, numE(88), numE(77)),
+                 idE("my-id"))),
+      tLbdy(idE("my-shadow-id"),
+            idE("my-id"),
+            []))
+------------------------------
+eqCon(tExpr(idE("my-shadow-id"))
+      tBind(bopE(plusOp, numE(88), numE(77)), []))
+eqCon(tExpr(bopE(plusOp, numE(88),numE(77))),
+      tBbop(numT, [numE(88), numE(77)], []))
+eqCon(tExpr(numE(88)),
+      tType(baseT(numT)))
+eqCon(tExpr(numE(77)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(idE("my-id")),
+      tType(varT("b")))
+
+=========================================================================
+
+(let (my-id 3) 
+     (let (my-shadow-id (+ my-id 77))
+          my-id))
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-id",
+                 numE(3),
+                 letE("my-shadow-id",
+                      binOp(plusOp, idE("my-id"), numE(77)),
+                      idE("my-id")))),
+      tLbdy(idE("my-id"),
+            letE("my-shadow-id",
+                 bopE(plusOp, idE("my-id"), numE(77)),
+                 idE("my-id")),
+            []))
+------------------------------
+eqCon(tExpr(idE("my-id")),
+      tBind(numE(3), []))
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-shadow-id",
+                 bopE(plusOp, idE("my-id"), numE(77)),
+                 idE("my-id"))),
+      tLbdy(idE("my-shadow-id"),
+            idE("my-id"),
+            []))
+------------------------------
+eqCon(tExpr(idE("my-shadow-id")),
+      tBind(bopE(plusOp, idE("my-id"), numE(77)), []))
+eqCon(tExpr(bopE(plusOp, idE("my-id"), numE(77))),
+      tBbop(numT, idE("my-id"), numE(77), []))
+eqCon(tExpr(idE("my-id")),
+      tType(varT("a")))
+eqCon(tExpr(numE(77)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(idE("my-id")),
+      tType(varT("b")))
+
+=========================================================================
+
+(let (my-id "str-value")
+     (+ my-id 3))
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-id", strE("str-value"), bopE(plusOp, idE("my-id"), numE(3)))),
+      tLbdy(idE("my-id"), bopE(plusOp, idE("my-id"), numE(3)), []))
+------------------------------
+eqCon(tExpr(idE("my-id")),
+      tBind(strE("str-value"), []))
+eqCon(tExpr(strE("str-value")),
+      tType(baseT(strT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(bopE(plusOp, idE("my-id"), numE(3))),               (1)
+      tBbop(numT, idE("my-id"), numE(3)))
+eqCon(tExpr(idE("my-id")),
+      tType(varT("a"))),
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+
+# It should raise type mismatch exception in (1), since 'plusOp'
+# dictates the type couldn't be 'strT'
+
+=========================================================================

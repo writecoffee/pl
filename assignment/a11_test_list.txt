@@ -1,0 +1,21 @@
+empty
+
+eqCon(tExpr(emptyE),
+      tType(conT(listT, [varT("a")])))
+
+=========================================================================
+
+link(3, link("hello", empty))
+
+eqCon(tExpr(bopE(linkOp, numE(3), bopE(linkOp, strE("hello"), emptyE))),
+      tLink(numE(3), bopE(linkOp, strE("hello"), emptyE), []))
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+eqCon(tExpr(bopE(linkOp, strE("hello"), emptyE)),
+      tLink(strE("hello"), emptyE, []))
+eqCon(tExpr(strE("hello")),
+      tType(baseT(strT)))
+eqCon(tExpr(emptyE),
+      tType(conT(listT, [varT("a")])))
+
+=========================================================================
