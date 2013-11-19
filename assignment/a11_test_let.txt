@@ -199,6 +199,73 @@ eqCon(tExpr(idE("my-id")),
 
 =========================================================================
 
+(let (my-id 3) 
+     (let (my-id (+ my-id 77))
+          my-id))
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-id",
+                 numE(3),
+                 letE("my-id",
+                      binOp(plusOp, idE("my-id"), numE(77)),
+                      idE("my-id")))),
+      tLbdy(idE("my-id"),
+            letE("my-id",
+                 bopE(plusOp, idE("my-id"), numE(77)),
+                 idE("my-id")),
+            []))
+------------------------------
+eqCon(tExpr(idE("my-id")),
+      tBind(numE(3), []))
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-id",
+                 bopE(plusOp, idE("my-id"), numE(77)),
+                 idE("my-id"))),
+      tLbdy(idE("my-id"),
+            idE("my-id"),
+            []))
+------------------------------
+eqCon(tExpr(idE("my-id")),
+      tBind(bopE(plusOp, idE("my-id"), numE(77)), []))
+eqCon(tExpr(bopE(plusOp, idE("my-id"), numE(77))),
+      tBbop(numT, idE("my-id"), numE(77), []))
+eqCon(tExpr(idE("my-id")),
+      tType(varT("a")))
+eqCon(tExpr(numE(77)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(idE("my-id")),
+      tType(varT("b")))
+
+=========================================================================
+
+(let (my-id my-id)
+     3)
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(letE("my-id",
+                 idE("my-id"),
+                 letE("my-id",
+                      idE("my-id"),
+                      numE(3)))),
+      tLbdy(idE("my-id"),
+            numE(3),
+            []))
+------------------------------
+eqCon(tExpr(idE("my-id")),
+      tBind(idE("my-id")), [])
+eqCon(tExpr(idE("my-id")),
+      tType(varT("a")))
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+
+# 'tBind' is a unifying (substitution) point, on seeing the same
+# term ('idE("my-id")'), unbound exception thrown on "my-id".
+
+=========================================================================
+
 (let (my-id "str-value")
      (+ my-id 3))
 
