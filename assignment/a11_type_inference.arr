@@ -43,10 +43,11 @@ data ConstrType:
   | listT
 end
 
-alpha-testing = true
+DEBUG = true
+NODEBUG = false
 
 GEN_VAR_ID = fun() -> String:
-  if alpha-testing:
+  if DEBUG:
     ""
   else:
     gensym("varT-")
@@ -68,7 +69,33 @@ end
 
 data Substitution:
   | substitution(mutable econs :: List<EqualCondition>) with:
-    replace(self, exp :: Expr) -> List<EqualCondition>:
+    replace(self, in :: Expr, with :: Type) -> List<EqualCondition>:
+      fun replace-helper(i :: Number, old-econs :: List<EqualCondition>) -> Bool:
+        cases (List<EqualCondition>) old-econs:
+          | empty =>
+            false
+          | link(econ, rest) =>
+            cases (Term) econ.rhs:
+              | tLink(value, next, etypes) =>
+                if (value == in) and (etypes == empty):
+                  oe = self!econs.get(i)
+                  ne = oe!{etypes : oe!etypes + [with]}
+                  self!{econs : self!econs.set(i, ne)}
+                else if (next == in) and (etypes.length() == 1):
+                  oe = self!econs.get(i)
+                  ne = oe!{etypes : oe!etypes + [with]}
+                  self!{econs : self!econs.set(i, ne)}
+# TODO: plug itself to its upstream
+                else:
+                  replace-helper(i + 1, rest)
+                end
+            end
+        end
+      end
+      if replace-helper(1, self!econs.rest):
+        self!{econs : self!econs.rest}
+      else:
+      end
     end
 end
 
@@ -198,73 +225,8 @@ where:
   nothing
 end
 
-###
-## lookup:
-##     It look-ups term against the substitution list. It would return
-##     the right hand side of the substitution instance if exp-term and
-##     the left hand side of the substitution matched.
 ##
-#fun lookup(exp-term :: Term, s-list :: List<Substitution>) -> Option:
-#  cases (List<Substitution>) s-list:
-#    | empty =>
-#      none
-#    | link(sub, sub-nxt) =>
-#      if sub.v == exp-term:
-#        sub.w
-#      else:
-#        lookup(exp-term, sub-nxt)
-#      end
-#  end
-#end
-#
-###
-## extend:
-##     (Perform the occurs test and, if it fails (i.e., there is no
-##     circularity)); extends the substitution list by constructing
-##     a new substitution pair.
-##
-#fun extend(lterm :: Term, rterm :: Term, s-list :: List<Substitution>) -> List<Substitution>:
-#  [sub(lexp-term, rexp-term)] + s-list
-#end
-#
-#fun is-exp-term(term :: Term) -> Bool:
-#  cases (Term) term:
-#    | tExpr(_) =>
-#      true
-#    | else =>
-#      false
-#  end
-#end
-#
-###
-## replace:
-##     (Perform the occurs test and, if it fails (i.e., there is
-##     no circularity)); replace all existing instances of the left
-##     term (lterm) with the right term (rterm) appeared in the
-##     substitution list.
-##
-#fun replace(in-term :: Term, with-term :: Term, s-list :: List<Substitution>) -> List<Substitution>:
-#  fun replace-helper(the-term :: Term) -> Term:
-#    cases (Term) the-term:
-#      | tExpr(expr) =>
-#        
-#      | tType(type) =>
-## TODO: keep an eye on the funT and listT
-#        nothing
-#    end
-#  end
-#  if not is-exp-term(in-term):
-#    s-list
-#  else:
-#    for fold(result from [], sub from s-list):
-#      l-old = sub.lhs 
-#      r-old = sub.rhs
-#      l-new = replace-helper(l-old, 
-#  end
-#end
-#
-##
-# unify:
+# UNIFY:
 #     The goal of unification is to generate a substitution, or
 #     mapping from variables to terms that do not contain any
 #     variables. For a given constraint, the unifier examines the
@@ -274,16 +236,20 @@ end
 #     it, replaces all occurrences of the variable in the
 #     substitution with this right-hand-side.
 #
-fun unify(constr :: Constraint, substr :: Substitution) -> Substitution
-  cases (List) constr.c-list:
+fun UNIFY(constr :: Constraint, substr :: Substitution) -> Substitution:
+  cases (List<EqualCondition>) constr.c-list:
     | empty =>
       substr
-    | link(c, c-l-nxt) =>
+    | link(c, rest) =>
       l = c.lhs.expr
       r = c.rhs
+      substr!{econs : [c] + substr!econs}
       cases (Term) r:
         | tType(type) =>
-          substr.replace(l)
+          substr.replace(l, type)
+          UNIFY(constraint(rest), substr)
+        | else =>
+          UNIFY(constraint(rest), substr)
       end
   end
 where:
@@ -299,10 +265,26 @@ end
 fun type-infer(prog :: String) -> Type:
   prog-exp = parse(read-sexpr(prog))
   cons-lst = GEN_CONSTR(prog-exp)
-  sub-list = unify(cons-lst, [])
+  subst = UNIFY(constraint(cons-lst), substitution([]))
+  subst!econs.get(0).rhs.type
 where:
-  type-infer('3') satisfies same-type(_, baseT(numT))
-  type-infer('(+ 3 4)') satisfies same-type(_, baseT(numT))
+  TEST_INFER_PASS = fun (prog :: String, expected :: Type, debug :: Bool):
+    if debug:
+      print("============= testing =============")
+      print(prog)
+      print("------------ expecting ------------")
+      print(expected)
+    else:
+      nothing
+    end
+    type-infer(prog) satisfies same-type(_, expected)
+  end
+  TEST_INFER_PASS('
+    3
+  ', baseT(numT), DEBUG)
+  TEST_INFER_PASS('
+    empty
+  ', conT(listT, [varT("varT-")]), DEBUG)
 
 #  type-infer('
 #    (fun (x) x)
