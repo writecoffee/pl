@@ -67,7 +67,7 @@ eqCon(tExpr(idE("param")),
 
 =========================================================================
 
-(fun (param) link(3, empty))
+(fun (param) (link 3 empty))
 
 eqCon(tExpr(lamE("param", bopE(linkOp, numE(3), emptyE))),
       tFunc(idE("param"), bopE(linkOp, numE(3), emptyE), []))

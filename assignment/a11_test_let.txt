@@ -218,7 +218,7 @@ eqCon(tExpr(idE("my-id")),
 eqCon(tExpr(numE(3)),
       tType(baseT(numT)))
 
-# It should raise type mismatch exception in (1), since 'plusOp'
+# It should raise unification exception in (1), since 'plusOp'
 # dictates the type couldn't be 'strT'
 
 =========================================================================

@@ -5,7 +5,7 @@ eqCon(tExpr(emptyE),
 
 =========================================================================
 
-link(3, link("hello", empty))
+(link 3 (link "hello" empty))
 
 eqCon(tExpr(bopE(linkOp, numE(3), bopE(linkOp, strE("hello"), emptyE))),
       tLink(numE(3), bopE(linkOp, strE("hello"), emptyE), []))
