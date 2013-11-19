@@ -12,6 +12,19 @@ eqCon(tExpr(strE("false")),
 
 =========================================================================
 
+(if 1 999 "false")
+
+eqCon(tExpr(cifE(numE(1), numE(999), strE("false"))),
+      tCifs(numE(1), numE(999), strE("false"), []))
+eqCon(tExpr(numE(1)),
+      tType(baseT(numT)))
+eqCon(tExpr(numE(999)),
+      tType(baseT(numT)))
+eqCon(tExpr(strE("false")),
+      tType(baseT(strT)))
+
+=========================================================================
+
 (if "condition"
     999
     (+ 3 7))
