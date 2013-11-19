@@ -1,0 +1,60 @@
+
+(if 1 "true" "false")
+
+eqCon(tExpr(cifE(numE(1), strE("true"), strE("false"))),
+      tCifs(numE(1), strE("true"), strE("false"), []))
+eqCon(tExpr(numE(1)),
+      tType(baseT(numT)))
+eqCon(tExpr(strE("true")),
+      tType(baseT(strT)))
+eqCon(tExpr(strE("false")),
+      tType(baseT(strT)))
+
+=========================================================================
+
+(if "condition"
+    999
+    (+ 3 7))
+
+eqCon(tExpr(cifE(strE("condition"), numE(999), bopE(plusOp, numE(3), numE(7)))),
+      tCifs(strE("condition"), numE(999), bopE(plusOp, numE(3), numE(7)), []))
+eqCon(tExpr(strE("condition")),
+      tType(baseT(strT)))
+eqCon(tExpr(numE(999)),
+      tType(baseT(numT)))
+eqCon(tExpr(bopE(plusOp, numE(3), numE(7))),
+      tBbop(numT, numE(3), numE(7)))
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+eqCon(tExpr(numE(7)),
+      tType(baseT(numT)))
+
+=========================================================================
+
+(fun (param)
+     (if "condition"
+         999
+         (+ 3 param)))
+
+eqCon(tExpr(lamE("param",
+                 cifE(strE("condition"),
+                      numE(999),
+                      bopE(plusOp, numE(3), numE(7))))),
+      tFunc(idE("param"),
+            cifE(strE("condition"),
+                 numE(999),
+                 bopE(plusOp, numE(3), numE(7)))))
+eqCon(tExpr(idE("param")),
+      tType(varT("a")))
+eqCon(tExpr(cifE(strE("condition"), numE(999), bopE(plusOp, numE(3), idE("param")))),
+      tCifs(strE("condition"), numE(999), bopE(plusOp, numE(3), idE("param")), []))
+eqCon(tExpr(numE(999)),
+      tType(baseT(numT)))
+eqCon(tExpr(bopE(plusOp, numE(3), idE(param))),
+      tBbop(numT, numE(3), idE("param"), []))
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+eqCon(tExpr(idE("param")),
+      tType(varT("b")))
+
+=========================================================================
