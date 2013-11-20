@@ -43,7 +43,7 @@ data ConstrType:
   | listT
 end
 
-DEBUG = true
+DEBUG = false
 NODEBUG = false
 DELIBERATE_ID = true
 
@@ -56,6 +56,48 @@ GEN_VAR_ID = fun() -> String:
 end
 
 data Term:
+  | tBind(bind-exp :: Expr,
+          mutable etypes :: List<Type>) with:
+    add-matched(self, in :: Expr, with :: Type) -> Bool:
+      if (self.bind-exp == in):
+        self!{etypes : self!etypes + [with]}
+        true
+      else:
+        false
+      end
+    end,
+    is-unified(self) -> Bool:
+      (self!etypes.length() == 1)
+    end,
+    get-expected-type(self) -> Type:
+      self!etypes.get(0)
+    end,
+    get-constraint-type(self) -> Option:
+      none
+    end
+  | tLbdy(bind-id :: Expr,
+          body :: Expr,
+          mutable etypes :: List<Type>) with:
+    add-matched(self, in :: Expr, with :: Type) -> Bool:
+      if (self.bind-id == in) and (self!etypes == empty):
+        self!{etypes : self!etypes + [with]}
+        true
+      else if (self.body == in) and (self!etypes.length() == 1):
+        self!{etypes : self!etypes + [with]}
+        true
+      else:
+        false
+      end
+    end,
+    is-unified(self) -> Bool:
+      (self!etypes.length() == 2)
+    end,
+    get-expected-type(self) -> Type:
+      self!etypes.get(1)
+    end,
+    get-constraint-type(self) -> Option:
+      none
+    end
   | tBbop(type :: Type,
           bop :: Operator,
           left :: Expr,
@@ -82,9 +124,6 @@ data Term:
     get-expected-type(self) -> Type:
       self.type
     end,
-    get-expression(self) -> Expr:
-      bopE(self.bop, self.left, self.right)
-    end,
     get-constraint-type(self) -> Option:
       self.type
     end
@@ -109,9 +148,6 @@ data Term:
     get-expected-type(self) -> Type:
       conT(funT, self!etypes)
     end,
-    get-expression(self) -> Expr:
-      lamE(self.param.name, self.body)
-    end,
     get-constraint-type(self) -> Option:
       none
     end
@@ -132,9 +168,6 @@ data Term:
     end,
     get-expected-type(self) -> Type:
       conT(listT, self!etypes)
-    end,
-    get-expression(self) -> Expr:
-      bopE(linkOp, self.value, self.next)
     end,
     get-constraint-type(self) -> Option:
       none
@@ -182,7 +215,7 @@ data Substitution:
             else:
             end
             if econ.rhs.is-unified():
-              res-expr = econ.rhs.get-expression()
+              res-expr = econ.lhs.expr
               res-type = econ.rhs.get-expected-type()
               if self.replace-helper(i + 1, res-expr, res-type, rest):
 #                  self!{econs : self!econs.drop(i)}
@@ -198,11 +231,14 @@ data Substitution:
           end
       end
     end,
-    replace(self, in :: Expr, with :: Type) -> List<EqualCondition>:
-      if self.replace-helper(1, in, with, self!econs.rest):
+    replace(self, in :: Expr, with :: Type) -> Bool:
+      if (self!econs.length() == 1):
+        true
+      else if self.replace-helper(1, in, with, self!econs.rest):
         self!{econs : self!econs.rest}
+        true
       else:
-        self!econs
+        false
       end
     end,
     lookup-helper(self,
@@ -214,6 +250,12 @@ data Substitution:
           cases (Expr) econ.lhs.expr:
             | lamE(param, _) =>
               if (param == id-lookup) and (econ.rhs!etypes <> empty):
+                some(econ.rhs!etypes.get(0))
+              else:
+                self.lookup-helper(id-lookup, rest)
+              end
+            | letE(name, _, _) =>
+              if (name == id-lookup) and (econ.rhs!etypes <> empty):
                 some(econ.rhs!etypes.get(0))
               else:
                 self.lookup-helper(id-lookup, rest)
@@ -362,6 +404,10 @@ fun GEN_CONSTR(exp :: Expr) -> List<EqualCondition>:
                                 tFunc(idE(param),
                                       body,
                                       [varT(GEN_VAR_ID())]))]
+    | letE(name, bind-exp, body) =>
+      GEN_CONSTR(body) + GEN_CONSTR(bind-exp)
+                       + [eqCon(tExpr(idE(name)), tBind(bind-exp, []))]
+                       + [eqCon(tExpr(exp), tLbdy(idE(name), body, []))]
     | else =>
       raise("Other expression cases are not-yet-considered for " +
             "constraints generation")
@@ -398,13 +444,19 @@ fun UNIFY(constr :: Constraint, substr :: Substitution) -> Substitution:
             | varT(var-name) =>
               res-lookup :: Option = substr.lookup(l.name)
               if res-lookup <> none:
-                substr.replace(l, res-lookup.value)
+                if not substr.replace(l, res-lookup.value):
+                  raise("unification error: " + l.name)
+                else: nothing
+                end
               else:
                 raise("unbound identifier: " + l.name)
               end
               UNIFY(constraint(rest), substr)
             | else =>
-              substr.replace(l, type)
+              if not substr.replace(l, type):
+                raise("unification error on baseT")
+              else: nothing
+              end
               UNIFY(constraint(rest), substr)
           end
         | else =>
@@ -455,6 +507,14 @@ where:
       type-infer(prog) raises ""
     end
   end
+  fun test-bop():
+    TEST_INFER_FAIL('
+      (+ unbound 3)
+    ', "unbound identifier: unbound", DEBUG)
+    TEST_INFER_FAIL('
+      (+ "string-value" 3)
+    ', "unification error on baseT", DEBUG)
+  end
   fun test-link():
     TEST_INFER_PASS('
       3
@@ -501,6 +561,50 @@ where:
       (fun (param) (+ 3 unbound))
     ', "unbound identifier: unbound", DEBUG)
   end
+  fun test-let():
+    TEST_INFER_PASS('
+      (let (my-id 3) my-id)
+    ', baseT(numT), DEBUG)
+    TEST_INFER_FAIL('
+      (let (my-id 3) unbound)
+    ', "unbound identifier: unbound", DEBUG)
+    TEST_INFER_FAIL('
+      (let (my-id 3) 
+           (let (my-shadow-id 99) unbound))
+    ', "unbound identifier: unbound", DEBUG)
+    TEST_INFER_PASS('
+      (let (my-id 3) 
+           (let (my-shadow-id 99) my-id))
+    ', baseT(numT), DEBUG)
+    TEST_INFER_PASS('
+      (let (my-id (+ 77 3)) 
+           (let (my-shadow-id 99) my-id))
+    ', baseT(numT), DEBUG)
+    TEST_INFER_PASS('
+      (let (my-id 3)
+           (let (my-shadow-id (+ 88 77)) my-id))
+    ', baseT(numT), DEBUG)
+    TEST_INFER_PASS('
+      (let (my-id 3) 
+           (let (my-shadow-id (+ my-id 77))
+                my-id))
+    ', baseT(numT), DEBUG)
+    TEST_INFER_PASS('
+      (let (my-id 3) 
+           (let (my-id (+ my-id 77))
+                my-id))
+    ', baseT(numT), DEBUG)
+    TEST_INFER_FAIL('
+      (let (my-id my-id)
+           3)
+    ', "unbound identifier: my-id", DEBUG)
+    TEST_INFER_FAIL('
+      (let (my-id "str-value")
+           (+ my-id 3))
+    ', "unification error: my-id", DEBUG)
+  end
+  test-bop()
   test-link()
   test-fun()
+  test-let()
 end

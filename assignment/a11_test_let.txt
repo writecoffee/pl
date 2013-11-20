@@ -31,7 +31,7 @@ eqCon(tExpr(idE("unbound")),
 =========================================================================
 
 (let (my-id 3) 
-     (let my-shadow-id 99) unbound)
+     (let (my-shadow-id 99) unbound))
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 eqCon(tExpr(letE("my-id", numE(3), letE("my-shadow-id", numE(99), idE("unbound")))),
@@ -56,7 +56,7 @@ eqCon(tExpr(idE("unbound")),
 =========================================================================
 
 (let (my-id 3) 
-     (let my-shadow-id 99) my-id)
+     (let (my-shadow-id 99) my-id))
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 eqCon(tExpr(letE("my-id", numE(3), letE("my-shadow-id", numE(99), idE("my-id")))),
@@ -81,7 +81,7 @@ eqCon(tExpr(idE("my-id")),
 =========================================================================
 
 (let (my-id (+ 77 3)) 
-     (let my-shadow-id 99) my-id)
+     (let (my-shadow-id 99) my-id))
 
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 eqCon(tExpr(letE("my-id",
