@@ -45,9 +45,10 @@ end
 
 DEBUG = true
 NODEBUG = false
+DELIBERATE_ID = true
 
 GEN_VAR_ID = fun() -> String:
-  if DEBUG:
+  if DELIBERATE_ID:
     ""
   else:
     gensym("varT-")
@@ -55,6 +56,65 @@ GEN_VAR_ID = fun() -> String:
 end
 
 data Term:
+  | tBbop(type :: Type,
+          bop :: Operator,
+          left :: Expr,
+          right :: Expr,
+          mutable etypes :: List<Type>) with:
+    add-matched(self, in :: Expr, with :: Type) -> Bool:
+      if (self.left == in) and ((self.type == with) or IS_TYPE_VAR(with))
+                           and (self!etypes == empty):
+        self!{etypes : self!etypes + [self.type]}
+        true
+      else if (self.right == in) and ((self.type == with) or IS_TYPE_VAR(with))
+                                 and (self!etypes.length() == 1):
+        self!{etypes : self!etypes + [self.type]}
+        true
+      else:
+        false
+      end
+    end,
+    is-unified(self) -> Bool:
+      (self!etypes.length() == 2) and
+      (self!etypes.get(0) == self.type) and
+      (self!etypes.get(1) == self.type)
+    end,
+    get-expected-type(self) -> Type:
+      self.type
+    end,
+    get-expression(self) -> Expr:
+      bopE(self.bop, self.left, self.right)
+    end,
+    get-constraint-type(self) -> Option:
+      self.type
+    end
+  | tFunc(param :: Expr, body :: Expr, mutable etypes :: List<Type>) with:
+    add-matched(self, in :: Expr, with :: Type) -> Bool:
+      var result = false
+      if (self.param == in):
+        self!{etypes : [with] + self!etypes.rest}
+        result := true
+      else: nothing
+      end
+      if (self.body == in):
+        self!{etypes : [self!etypes.first] + [with]}
+        result := true
+      else: nothing
+      end
+      result
+    end,
+    is-unified(self) -> Bool:
+      self!etypes.length() == 2
+    end,
+    get-expected-type(self) -> Type:
+      conT(funT, self!etypes)
+    end,
+    get-expression(self) -> Expr:
+      lamE(self.param.name, self.body)
+    end,
+    get-constraint-type(self) -> Option:
+      none
+    end
   | tLink(value :: Expr, next :: Expr, mutable etypes :: List<Type>) with:
     add-matched(self, in :: Expr, with :: Type) -> Bool:
       if (self.value == in) and (self!etypes == empty):
@@ -75,11 +135,17 @@ data Term:
     end,
     get-expression(self) -> Expr:
       bopE(linkOp, self.value, self.next)
+    end,
+    get-constraint-type(self) -> Option:
+      none
     end
   | tType(type :: Type) with:
     get-expected-type(self) -> Type:
       self.type
     end,
+    is-unified(self) -> Bool:
+      true
+    end
   | tExpr(expr :: Expr)
 end
 
@@ -87,40 +153,78 @@ data EqualCondition:
   | eqCon(lhs :: Term, rhs :: Term)
 end
 
+fun IS_TYPE_VAR(type :: Type) -> Bool:
+  cases (Type) type:
+    | varT(_) => true
+    | else => false
+  end
+end
+
 data Substitution:
   | substitution(mutable econs :: List<EqualCondition>) with:
-    replace(self, in :: Expr, with :: Type) -> List<EqualCondition>:
-      fun replace-helper(i :: Number,
-                         in-e :: Expr,
-                         with-e :: Type,
-                         old-econs :: List<EqualCondition>) -> Bool:
-        cases (List<EqualCondition>) old-econs:
-          | empty =>
-            false
-          | link(econ, rest) =>
-            if econ.rhs.add-matched(in-e, with-e):
-              if econ.rhs.is-unified():
-                res-expr = econ.rhs.get-expression()
-                res-type = econ.rhs.get-expected-type()
-                if replace-helper(i + 1, res-expr, res-type, rest):
+    replace-helper(self,
+                   i :: Number,
+                   in-e :: Expr,
+                   with-e :: Type,
+                   old-econs :: List<EqualCondition>) -> Bool:
+      cases (List<EqualCondition>) old-econs:
+        | empty =>
+          false
+        | link(econ, rest) =>
+          if econ.rhs.add-matched(in-e, with-e):
+            if IS_TYPE_VAR(with-e) and (econ.rhs.get-constraint-type() <> none):
+              res-lookup :: Option = self.lookup-helper(in-e.name, rest)
+              if res-lookup <> none:
+                self.replace-helper(i + 1, in-e, econ.rhs.get-expected-type(), rest)
+              else:
+                raise("unbound identifier: " + in-e.name)
+              end
+            else:
+            end
+            if econ.rhs.is-unified():
+              res-expr = econ.rhs.get-expression()
+              res-type = econ.rhs.get-expected-type()
+              if self.replace-helper(i + 1, res-expr, res-type, rest):
 #                  self!{econs : self!econs.drop(i)}
 # TODO: drop the middle (i) here
-                  nothing
-                else: nothing
-                end
+                nothing
               else: nothing
               end
-              true
-            else:
-              replace-helper(i + 1, in-e, with-e, rest)
+            else: nothing
             end
-        end
+            true
+          else:
+            self.replace-helper(i + 1, in-e, with-e, rest)
+          end
       end
-      if replace-helper(1, in, with, self!econs.rest):
+    end,
+    replace(self, in :: Expr, with :: Type) -> List<EqualCondition>:
+      if self.replace-helper(1, in, with, self!econs.rest):
         self!{econs : self!econs.rest}
       else:
         self!econs
       end
+    end,
+    lookup-helper(self,
+                  id-lookup :: String,
+                  old-econs :: List<EqualCondition>) -> Option:
+      cases (List<EqualCondition>) old-econs:
+        | empty => none
+        | link(econ, rest) =>
+          cases (Expr) econ.lhs.expr:
+            | lamE(param, _) =>
+              if (param == id-lookup) and (econ.rhs!etypes <> empty):
+                some(econ.rhs!etypes.get(0))
+              else:
+                self.lookup-helper(id-lookup, rest)
+              end
+            | else =>
+              self.lookup-helper(id-lookup, rest)
+          end
+      end
+    end,
+    lookup(self, id-lookup :: String) -> Option:
+      self.lookup-helper(id-lookup, self!econs.rest)
     end
 end
 
@@ -237,8 +341,27 @@ fun GEN_CONSTR(exp :: Expr) -> List<EqualCondition>:
     | bopE(op, l, r) =>
       cases (Operator) op:
         | linkOp =>
-          GEN_CONSTR(r) + GEN_CONSTR(l) + [eqCon(tExpr(exp), tLink(l, r, []))]
+          GEN_CONSTR(r) + GEN_CONSTR(l)
+                        + [eqCon(tExpr(exp), tLink(l, r, []))]
+        | plus =>
+          GEN_CONSTR(r) + GEN_CONSTR(l)
+                        + [eqCon(tExpr(exp), tBbop(baseT(numT), plus, l, r, []))]
+        | minus =>
+          GEN_CONSTR(r) + GEN_CONSTR(l)
+                        + [eqCon(tExpr(exp), tBbop(baseT(numT), minus, l, r, []))]
+        | append =>
+          GEN_CONSTR(r) + GEN_CONSTR(l)
+                        + [eqCon(tExpr(exp), tBbop(baseT(strT), append, l, r, []))]
+        | str-eq =>
+          GEN_CONSTR(r) + GEN_CONSTR(l)
+                        + [eqCon(tExpr(exp), tBbop(baseT(strT), str-eq, l, r, []))]
       end
+    | lamE(param, body) => 
+      GEN_CONSTR(body) + GEN_CONSTR(idE(param))
+                       + [eqCon(tExpr(exp), 
+                                tFunc(idE(param),
+                                      body,
+                                      [varT(GEN_VAR_ID())]))]
     | else =>
       raise("Other expression cases are not-yet-considered for " +
             "constraints generation")
@@ -271,8 +394,19 @@ fun UNIFY(constr :: Constraint, substr :: Substitution) -> Substitution:
       substr!{econs : [c] + substr!econs}
       cases (Term) r:
         | tType(type) =>
-          substr.replace(l, type)
-          UNIFY(constraint(rest), substr)
+          cases (Type) type:
+            | varT(var-name) =>
+              res-lookup :: Option = substr.lookup(l.name)
+              if res-lookup <> none:
+                substr.replace(l, res-lookup.value)
+              else:
+                raise("unbound identifier: " + l.name)
+              end
+              UNIFY(constraint(rest), substr)
+            | else =>
+              substr.replace(l, type)
+              UNIFY(constraint(rest), substr)
+          end
         | else =>
           UNIFY(constraint(rest), substr)
       end
@@ -291,7 +425,11 @@ fun type-infer(prog :: String) -> Type:
   prog-exp = parse(read-sexpr(prog))
   cons-lst = GEN_CONSTR(prog-exp)
   subst = UNIFY(constraint(cons-lst.reverse()), substitution([]))
-  subst!econs.last().rhs.get-expected-type()
+  if not subst!econs.last().rhs.is-unified():
+    raise("there must be bug in the program")
+  else:
+    subst!econs.last().rhs.get-expected-type()
+  end
 where:
   TEST_INFER_PASS = fun (prog :: String, expected :: Type, debug :: Bool):
     if debug:
@@ -305,29 +443,64 @@ where:
       type-infer(prog) satisfies same-type(_, expected)
     end
   end
-  TEST_INFER_PASS('
-    3
-  ', baseT(numT), DEBUG)
-  TEST_INFER_PASS('
-    "hello"
-  ', baseT(strT), DEBUG)
-  TEST_INFER_PASS('
-    empty
-  ', conT(listT, [varT("varT-")]), DEBUG)
-  TEST_INFER_PASS('
-    (link "hello" empty)
-  ', conT(listT, [baseT(strT), conT(listT, [varT("varT-")])]), DEBUG)
-  TEST_INFER_PASS('
-    (link 3 (link "hello" empty))
-  ', conT(listT,
-          [baseT(numT),
-           conT(listT,
-                [baseT(strT),
-                 conT(listT,
-                      [varT("varT-")])])]), DEBUG)
-
-#  type-infer('
-#    (fun (x) x)
-#  ') satisfies same-type(_, conT(funT, [varT("q"), varT("p")]))
-
+  TEST_INFER_FAIL = fun (prog :: String, exception :: String, debug :: Bool):
+    if debug:
+      print("============= testing =============")
+      print(prog)
+      print("------ expecting exception --------")
+      print(exception)
+      type-infer(prog) raises exception
+      print("~~~~~~~~~~~~~~ DONE ~~~~~~~~~~~~~~~")
+    else:
+      type-infer(prog) raises ""
+    end
+  end
+  fun test-link():
+    TEST_INFER_PASS('
+      3
+    ', baseT(numT), DEBUG)
+    TEST_INFER_PASS('
+      "hello"
+    ', baseT(strT), DEBUG)
+    TEST_INFER_PASS('
+      empty
+    ', conT(listT, [varT("varT-")]), DEBUG)
+    TEST_INFER_PASS('
+      (link "hello" empty)
+    ', conT(listT, [baseT(strT), conT(listT, [varT("varT-")])]), DEBUG)
+    TEST_INFER_PASS('
+      (link 3 (link "hello" empty))
+    ', conT(listT,
+            [baseT(numT),
+             conT(listT,
+                  [baseT(strT),
+                   conT(listT,
+                        [varT("varT-")])])]), DEBUG)
+  end
+  fun test-fun():
+    TEST_INFER_FAIL('
+      (fun (param) unbound)
+    ', "unbound identifier: unbound", DEBUG)
+    TEST_INFER_PASS('
+      (fun (param) 3)
+    ', conT(funT, [varT("varT-"), baseT(numT)]), DEBUG)
+    TEST_INFER_PASS('
+      (fun (param) param)
+    ', conT(funT, [varT("varT-"), varT("varT-")]), DEBUG)
+    TEST_INFER_PASS('
+      (fun (param) (link 3 empty))
+    ', conT(funT, [varT("varT-"),
+                   conT(listT,
+                        [baseT(numT),
+                         conT(listT,
+                              [varT("varT-")])])]), DEBUG)
+    TEST_INFER_PASS('
+      (fun (param) (+ 3 param))
+    ', conT(funT, [baseT(numT), baseT(numT)]), DEBUG)
+    TEST_INFER_FAIL('
+      (fun (param) (+ 3 unbound))
+    ', "unbound identifier: unbound", DEBUG)
+  end
+  test-link()
+  test-fun()
 end
