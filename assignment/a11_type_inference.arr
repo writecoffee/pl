@@ -56,10 +56,30 @@ end
 
 data Term:
   | tLink(value :: Expr, next :: Expr, mutable etypes :: List<Type>) with:
-    add-matched(self, et :: Type) -> List<Type>:
-      self!{etypes : self!etypes + [et]}
+    add-matched(self, in :: Expr, with :: Type) -> Bool:
+      if (self.value == in) and (self!etypes == empty):
+        self!{etypes : self!etypes + [with]}
+        true
+      else if (self.next == in) and (self!etypes.length() == 1):
+        self!{etypes : self!etypes + [with]}
+        true
+      else:
+        false
+      end
+    end,
+    is-unified(self) -> Bool:
+      self!etypes.length() == 2
+    end,
+    get-expected-type(self) -> Type:
+      conT(listT, self!etypes)
+    end,
+    get-expression(self) -> Expr:
+      bopE(linkOp, self.value, self.next)
     end
-  | tType(type :: Type)
+  | tType(type :: Type) with:
+    get-expected-type(self) -> Type:
+      self.type
+    end,
   | tExpr(expr :: Expr)
 end
 
@@ -70,31 +90,36 @@ end
 data Substitution:
   | substitution(mutable econs :: List<EqualCondition>) with:
     replace(self, in :: Expr, with :: Type) -> List<EqualCondition>:
-      fun replace-helper(i :: Number, old-econs :: List<EqualCondition>) -> Bool:
+      fun replace-helper(i :: Number,
+                         in-e :: Expr,
+                         with-e :: Type,
+                         old-econs :: List<EqualCondition>) -> Bool:
         cases (List<EqualCondition>) old-econs:
           | empty =>
             false
           | link(econ, rest) =>
-            cases (Term) econ.rhs:
-              | tLink(value, next, etypes) =>
-                if (value == in) and (etypes == empty):
-                  oe = self!econs.get(i)
-                  ne = oe!{etypes : oe!etypes + [with]}
-                  self!{econs : self!econs.set(i, ne)}
-                else if (next == in) and (etypes.length() == 1):
-                  oe = self!econs.get(i)
-                  ne = oe!{etypes : oe!etypes + [with]}
-                  self!{econs : self!econs.set(i, ne)}
-# TODO: plug itself to its upstream
-                else:
-                  replace-helper(i + 1, rest)
+            if econ.rhs.add-matched(in-e, with-e):
+              if econ.rhs.is-unified():
+                res-expr = econ.rhs.get-expression()
+                res-type = econ.rhs.get-expected-type()
+                if replace-helper(i + 1, res-expr, res-type, rest):
+#                  self!{econs : self!econs.drop(i)}
+# TODO: drop the middle (i) here
+                  nothing
+                else: nothing
                 end
+              else: nothing
+              end
+              true
+            else:
+              replace-helper(i + 1, in-e, with-e, rest)
             end
         end
       end
-      if replace-helper(1, self!econs.rest):
+      if replace-helper(1, in, with, self!econs.rest):
         self!{econs : self!econs.rest}
       else:
+        self!econs
       end
     end
 end
@@ -265,8 +290,8 @@ end
 fun type-infer(prog :: String) -> Type:
   prog-exp = parse(read-sexpr(prog))
   cons-lst = GEN_CONSTR(prog-exp)
-  subst = UNIFY(constraint(cons-lst), substitution([]))
-  subst!econs.get(0).rhs.type
+  subst = UNIFY(constraint(cons-lst.reverse()), substitution([]))
+  subst!econs.last().rhs.get-expected-type()
 where:
   TEST_INFER_PASS = fun (prog :: String, expected :: Type, debug :: Bool):
     if debug:
@@ -274,17 +299,32 @@ where:
       print(prog)
       print("------------ expecting ------------")
       print(expected)
+      type-infer(prog) satisfies same-type(_, expected)
+      print("~~~~~~~~~~~~~~ DONE ~~~~~~~~~~~~~~~")
     else:
-      nothing
+      type-infer(prog) satisfies same-type(_, expected)
     end
-    type-infer(prog) satisfies same-type(_, expected)
   end
   TEST_INFER_PASS('
     3
   ', baseT(numT), DEBUG)
   TEST_INFER_PASS('
+    "hello"
+  ', baseT(strT), DEBUG)
+  TEST_INFER_PASS('
     empty
   ', conT(listT, [varT("varT-")]), DEBUG)
+  TEST_INFER_PASS('
+    (link "hello" empty)
+  ', conT(listT, [baseT(strT), conT(listT, [varT("varT-")])]), DEBUG)
+  TEST_INFER_PASS('
+    (link 3 (link "hello" empty))
+  ', conT(listT,
+          [baseT(numT),
+           conT(listT,
+                [baseT(strT),
+                 conT(listT,
+                      [varT("varT-")])])]), DEBUG)
 
 #  type-infer('
 #    (fun (x) x)
