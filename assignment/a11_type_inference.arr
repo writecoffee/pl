@@ -43,7 +43,7 @@ data ConstrType:
   | listT
 end
 
-DEBUG = true
+DEBUG = false
 NODEBUG = false
 DELIBERATE_ID = true
 
@@ -296,6 +296,12 @@ data Substitution:
               else:
                 self.lookup-helper(id-lookup, rest)
               end
+            | appE(lambda, _) =>
+              if (lambda.param == id-lookup) and (econ.rhs!etypes <> empty):
+                some(econ.rhs!etypes.get(0))
+              else:
+                self.lookup-helper(id-lookup, rest)
+              end
             | else =>
               self.lookup-helper(id-lookup, rest)
           end
@@ -448,6 +454,15 @@ fun GEN_CONSTR(exp :: Expr) -> List<EqualCondition>:
       GEN_CONSTR(alt) + GEN_CONSTR(seq)
                       + GEN_CONSTR(cond)
                       + [eqCon(tExpr(exp), tCifs(cond, seq, alt, []))]
+    | appE(func, arg) =>
+      cases (Expr) func:
+        | lamE(param, body) =>
+          GEN_CONSTR(body) + GEN_CONSTR(arg)
+                           + [eqCon(tExpr(idE(param)), tBind(arg, []))]
+                           + [eqCon(tExpr(exp), tLbdy(idE(param), body, []))]
+        | else =>
+          raise("cannot apply a non-lambda expression")
+      end
     | else =>
       raise("Other expression cases are not-yet-considered for " +
             "constraints generation")
@@ -525,24 +540,24 @@ fun type-infer(prog :: String) -> Type:
 where:
   TEST_INFER_PASS = fun (prog :: String, expected :: Type, debug :: Bool):
     if debug:
-      print("============= testing =============")
+      print("================ testing ================")
       print(prog)
-      print("------------ expecting ------------")
+      print("--------------- expecting ---------------")
       print(expected)
       type-infer(prog) satisfies same-type(_, expected)
-      print("~~~~~~~~~~~~~~ DONE ~~~~~~~~~~~~~~~")
+      print("~~~~~~~~~~~~~~~~~ DONE ~~~~~~~~~~~~~~~~~~")
     else:
       type-infer(prog) satisfies same-type(_, expected)
     end
   end
   TEST_INFER_FAIL = fun (prog :: String, exception :: String, debug :: Bool):
     if debug:
-      print("============= testing =============")
+      print("================ testing ================")
       print(prog)
-      print("------ expecting exception --------")
+      print("--------- expecting exception -----------")
       print(exception)
       type-infer(prog) raises exception
-      print("~~~~~~~~~~~~~~ DONE ~~~~~~~~~~~~~~~")
+      print("~~~~~~~~~~~~~~~~~ DONE ~~~~~~~~~~~~~~~~~~")
     else:
       type-infer(prog) raises ""
     end
@@ -680,9 +695,24 @@ where:
                (+ param param)))
     ', conT(funT, [baseT(numT), baseT(numT)]), DEBUG)
   end
+  fun test-app():
+    TEST_INFER_PASS('
+      ((fun (param) param) 99)
+    ', baseT(numT), DEBUG)
+    TEST_INFER_PASS('
+      ((fun (param) "hello") 99)
+    ', baseT(strT), DEBUG)
+    TEST_INFER_FAIL('
+      ((fun (param) "hello") param)
+    ', "unbound identifier: param", DEBUG)
+    TEST_INFER_FAIL('
+      ((fun (param) unbound) "hello")
+    ', "unbound identifier: unbound", DEBUG)
+  end
   test-bop()
   test-link()
   test-fun()
   test-let()
   test-cif()
+  test-app()
 end
