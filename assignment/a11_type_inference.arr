@@ -43,7 +43,7 @@ data ConstrType:
   | listT
 end
 
-DEBUG = false
+DEBUG = true
 NODEBUG = false
 DELIBERATE_ID = true
 
@@ -56,10 +56,46 @@ GEN_VAR_ID = fun() -> String:
 end
 
 data Term:
+  | tCifs(cond-exp :: Expr,
+          seq-exp :: Expr,
+          alt-exp :: Expr,
+          mutable etypes :: List<Type>) with:
+    add-matched(self, in :: Expr, with :: Type) -> Bool:
+      var result = true
+      if (self.cond-exp == in) and (self!etypes == empty):
+        self!{etypes : self!etypes + [with]}
+      else if (self.seq-exp == in) and (self!etypes.length() == 1):
+        self!{etypes : self!etypes + [with]}
+      else if (self.alt-exp == in) and (self!etypes.length() == 2):
+        if (self!etypes.get(1) == with):
+          self!{etypes : self!etypes + [with]}
+        else if (IS_TYPE_VAR(self!etypes.get(1))):
+          self!{etypes : [self!etypes.first] + [with, with]}
+        else:
+          result := false
+        end
+      else:
+        result := false
+      end
+      result
+    end,
+    is-unified(self) -> Bool:
+      (self!etypes.length() == 3)
+    end,
+    get-expected-type(self) -> Type:
+      self!etypes.get(1)
+    end,
+    get-constraint-type(self) -> Option:
+      if (self!etypes.length() > 1) and (not IS_TYPE_VAR(self!etypes.get(1))):
+        self!etypes.get(1)
+      else:
+        none
+      end
+    end
   | tBind(bind-exp :: Expr,
           mutable etypes :: List<Type>) with:
     add-matched(self, in :: Expr, with :: Type) -> Bool:
-      if (self.bind-exp == in):
+      if (self.bind-exp == in) and (self!etypes == empty):
         self!{etypes : self!etypes + [with]}
         true
       else:
@@ -408,6 +444,10 @@ fun GEN_CONSTR(exp :: Expr) -> List<EqualCondition>:
       GEN_CONSTR(body) + GEN_CONSTR(bind-exp)
                        + [eqCon(tExpr(idE(name)), tBind(bind-exp, []))]
                        + [eqCon(tExpr(exp), tLbdy(idE(name), body, []))]
+    | cifE(cond, seq, alt) =>
+      GEN_CONSTR(alt) + GEN_CONSTR(seq)
+                      + GEN_CONSTR(cond)
+                      + [eqCon(tExpr(exp), tCifs(cond, seq, alt, []))]
     | else =>
       raise("Other expression cases are not-yet-considered for " +
             "constraints generation")
@@ -603,8 +643,46 @@ where:
            (+ my-id 3))
     ', "unification error: my-id", DEBUG)
   end
+  fun test-cif():
+    TEST_INFER_PASS('
+      (if 1 "true" "false")
+    ', baseT(strT), DEBUG)
+    TEST_INFER_FAIL('
+      (if 1 999 "false")
+    ', "unification error on baseT", DEBUG)
+    TEST_INFER_PASS('
+      (if "condition"
+          999
+          (+ 3 7))
+    ', baseT(numT), DEBUG)
+    TEST_INFER_PASS('
+      (fun (param)
+           (if "condition"
+               999
+               (+ 3 param)))
+    ', conT(funT, [baseT(numT), baseT(numT)]), DEBUG)
+    TEST_INFER_PASS('
+      (fun (param)
+           (if param
+               999
+               (+ 3 param)))
+    ', conT(funT, [baseT(numT), baseT(numT)]), DEBUG)
+    TEST_INFER_PASS('
+      (fun (param)
+           (if param
+               param
+               (+ 3 param)))
+    ', conT(funT, [baseT(numT), baseT(numT)]), DEBUG)
+    TEST_INFER_PASS('
+      (fun (param)
+           (if param
+               param
+               (+ param param)))
+    ', conT(funT, [baseT(numT), baseT(numT)]), DEBUG)
+  end
   test-bop()
   test-link()
   test-fun()
   test-let()
+  test-cif()
 end

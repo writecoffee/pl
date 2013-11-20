@@ -71,3 +71,19 @@ eqCon(tExpr(idE("param")),
       tType(varT("b")))
 
 =========================================================================
+
+(fun (param)
+     (if param
+         999
+         (+ 3 param)))
+
+(fun (param)
+     (if param
+         param
+         (+ 3 param)))
+
+(fun (param)
+     (if param
+         param
+         (+ param param)))
+
