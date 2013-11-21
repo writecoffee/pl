@@ -55,7 +55,95 @@ GEN_VAR_ID = fun() -> String:
   end
 end
 
+fun IS_TYPE_VAR(type :: Type) -> Bool:
+  cases (Type) type:
+    | varT(_) => true
+    | else => false
+  end
+end
+
+fun IS_TYPE_LINK(type :: Type) -> Bool:
+  cases (Type) type:
+    | conT(constr, _) =>
+      (constr == listT)
+    | else =>
+      false
+  end
+end
+
 data Term:
+  | tUopr(arg-first :: Expr,
+          arg-rest :: Expr,
+          mutable etypes :: List<Type>) with:
+    add-matched(self, in :: Expr, with :: Type) -> Bool:
+      if (self.arg-first == in) and (self!etypes == empty):
+        self!{etypes : self!etypes + [with]}
+        true
+      else if (self.arg-rest == in) and (self!etypes.length() == 1)
+                                    and (IS_TYPE_LINK(with) or IS_TYPE_VAR(with)):
+# TODO: test (fun (param) (rest param)),
+#       return "conT(listT, [varT("q")])" or "conT(listT, [varT("p"), varT("q")])"
+        self!{etypes : self!etypes + [with]}
+        true
+      else:
+        false
+      end
+    end,
+    is-unified(self) -> Bool:
+      (self!etypes.length() == 2)
+    end,
+    get-expected-type(self) -> Type:
+      self!etypes.get(1)
+    end,
+    get-constraint-type(self) -> Option:
+      none
+    end
+  | tUopf(arg-first :: Expr,
+          arg-rest :: Expr,
+          mutable etypes :: List<Type>) with:
+    add-matched(self, in :: Expr, with :: Type) -> Bool:
+      if (self.arg-first == in) and (self!etypes == empty):
+        self!{etypes : self!etypes + [with]}
+        true
+      else if (self.arg-rest == in) and (self!etypes.length() == 1)
+                                    and (IS_TYPE_LINK(with) or IS_TYPE_VAR(with)):
+# TODO: test (fun (param) (first param))
+        self!{etypes : self!etypes + [with]}
+        true
+      else:
+        false
+      end
+    end,
+    is-unified(self) -> Bool:
+      (self!etypes.length() == 2)
+    end,
+    get-expected-type(self) -> Type:
+      self!etypes.get(0)
+    end,
+    get-constraint-type(self) -> Option:
+      none
+    end
+  | tUope(arg :: Expr,
+          mutable etypes :: List<Type>) with:
+    add-matched(self, in :: Expr, with :: Type) -> Bool:
+      if (self.arg == in) and (self!etypes == empty)
+                          and (IS_TYPE_LINK(with) or IS_TYPE_VAR(with)):
+# TODO: test (fun (param) (empty param))
+        self!{etypes : self!etypes + [with]}
+        true
+      else:
+        false
+      end
+    end,
+    is-unified(self) -> Bool:
+      (self!etypes.length() == 1)
+    end,
+    get-expected-type(self) -> Type:
+      baseT(numT)
+    end,
+    get-constraint-type(self) -> Option:
+      baseT(numT)
+    end
   | tCifs(cond-exp :: Expr,
           seq-exp :: Expr,
           alt-exp :: Expr,
@@ -220,13 +308,6 @@ end
 
 data EqualCondition:
   | eqCon(lhs :: Term, rhs :: Term)
-end
-
-fun IS_TYPE_VAR(type :: Type) -> Bool:
-  cases (Type) type:
-    | varT(_) => true
-    | else => false
-  end
 end
 
 data Substitution:
@@ -460,8 +541,41 @@ fun GEN_CONSTR(exp :: Expr) -> List<EqualCondition>:
           GEN_CONSTR(body) + GEN_CONSTR(arg)
                            + [eqCon(tExpr(idE(param)), tBind(arg, []))]
                            + [eqCon(tExpr(exp), tLbdy(idE(param), body, []))]
+# TODO: add id lambda
         | else =>
           raise("cannot apply a non-lambda expression")
+      end
+    | uopE(uop, arg) =>
+      cases (UnaryOperator) uop:
+        | emptyOp =>
+# TODO: add id case
+          GEN_CONSTR(arg) + [eqCon(tExpr(exp), tUope(arg, []))]
+        | firstOp =>
+# TODO: add id case
+          cases (Expr) arg:
+            | bopE(bop, first, rest) =>
+              if (bop == linkOp):
+                GEN_CONSTR(rest) + GEN_CONSTR(first)
+                                  + [eqCon(tExpr(exp), tUopf(first, rest, []))]
+              else:
+                raise("firstOp: cannot apply on a non-link expression")
+              end
+            | else =>
+              raise("firstOp: cannot apply on a non-link expression")
+          end
+        | restOp =>
+# TODO: add id case
+          cases (Expr) arg:
+            | bopE(bop, first, rest) =>
+              if (bop == linkOp):
+                GEN_CONSTR(rest) + GEN_CONSTR(first)
+                                  + [eqCon(tExpr(exp), tUopr(first, rest, []))]
+              else:
+                raise("restOp: cannot apply on a non-link expression")
+              end
+            | else =>
+              raise("restOp: cannot apply on a non-link expression")
+          end
       end
     | else =>
       raise("Other expression cases are not-yet-considered for " +
@@ -709,10 +823,25 @@ where:
       ((fun (param) unbound) "hello")
     ', "unbound identifier: unbound", DEBUG)
   end
+  fun test-uop():
+    TEST_INFER_PASS('
+      (empty? empty)
+    ', baseT(numT), DEBUG)
+    TEST_INFER_PASS('
+      (empty? (link "hello" empty))
+    ', baseT(numT), DEBUG)
+    TEST_INFER_PASS('
+      (rest (link 3 (link "hello" empty)))
+    ', conT(listT, [baseT(strT), conT(listT, [varT("varT-")])]), DEBUG)
+    TEST_INFER_PASS('
+      (first (link 3 (link "hello" empty)))
+    ', baseT(numT), DEBUG)
+  end
   test-bop()
   test-link()
   test-fun()
   test-let()
   test-cif()
   test-app()
+  test-uop()
 end
