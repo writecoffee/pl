@@ -13,11 +13,14 @@ data Expr:
   | emptyE
 end
 
+
 data UnaryOperator:
   | firstOp
   | restOp
   | emptyOp # tests whether a list is empty
 end
+
+
 
 data Operator:
   | plus
@@ -45,7 +48,7 @@ end
 
 DEBUG = false
 NODEBUG = false
-DELIBERATE_ID = true
+DELIBERATE_ID = false
 
 GEN_VAR_ID = fun() -> String:
   if DELIBERATE_ID:
@@ -72,6 +75,19 @@ fun IS_TYPE_LINK(type :: Type) -> Bool:
 end
 
 data Term:
+  | tUopr-var(uop-exp :: Expr, var-exp :: Expr) with:
+    add-matched(self, in :: Expr, with :: Type) -> Bool:
+      raise("tUopr-var: add-matched is unsupported")
+    end,
+    is-unified(self) -> Bool:
+      raise("tUopr-var: is-unified is unsupported")
+    end,
+    get-expected-type(self) -> Type:
+      raise("tUopr-var: get-expected-type is unsupported")
+    end,
+    get-constraint-type(self) -> Option:
+      none
+    end
   | tUopr(arg-first :: Expr,
           arg-rest :: Expr,
           mutable etypes :: List<Type>) with:
@@ -98,6 +114,19 @@ data Term:
     get-constraint-type(self) -> Option:
       none
     end
+  | tUopf-var(uop-exp :: Expr, var-exp :: Expr) with:
+    add-matched(self, in :: Expr, with :: Type) -> Bool:
+      raise("tUopf-var: add-matched is unsupported")
+    end,
+    is-unified(self) -> Bool:
+      raise("tUopf-var: is-unified is unsupported")
+    end,
+    get-expected-type(self) -> Type:
+      raise("tUopf-var: get-expected-type is unsupported")
+    end,
+    get-constraint-type(self) -> Option:
+      none
+    end
   | tUopf(arg-first :: Expr,
           arg-rest :: Expr,
           mutable etypes :: List<Type>) with:
@@ -107,7 +136,6 @@ data Term:
         true
       else if (self.arg-rest == in) and (self!etypes.length() == 1)
                                     and (IS_TYPE_LINK(with) or IS_TYPE_VAR(with)):
-# TODO: test (fun (param) (first param))
         self!{etypes : self!etypes + [with]}
         true
       else:
@@ -119,6 +147,19 @@ data Term:
     end,
     get-expected-type(self) -> Type:
       self!etypes.get(0)
+    end,
+    get-constraint-type(self) -> Option:
+      none
+    end
+  | tUope-var(uop-exp :: Expr, var-exp :: Expr) with:
+    add-matched(self, in :: Expr, with :: Type) -> Bool:
+      raise("tUopr-var: add-matched is unsupported")
+    end,
+    is-unified(self) -> Bool:
+      raise("tUopr-var: is-unified is unsupported")
+    end,
+    get-expected-type(self) -> Type:
+      raise("tUopr-var: get-expected-type is unsupported")
     end,
     get-constraint-type(self) -> Option:
       none
@@ -291,12 +332,15 @@ data Term:
       self!etypes.length() == 2
     end,
     get-expected-type(self) -> Type:
-      conT(listT, self!etypes)
+      conT(listT, [self!etypes.get(0)])
     end,
     get-constraint-type(self) -> Option:
       none
     end
   | tType(type :: Type) with:
+    add-matched(self, in :: Expr, with :: Type) -> Bool:
+      false
+    end,
     get-expected-type(self) -> Type:
       self.type
     end,
@@ -352,7 +396,6 @@ data Substitution:
       if (self!econs.length() == 1):
         true
       else if self.replace-helper(1, in, with, self!econs.rest):
-        self!{econs : self!econs.rest}
         true
       else:
         false
@@ -396,7 +439,6 @@ end
 data Constraint:
   | constraint(c-list :: List<EqualCondition>)
 end
-
 
 fun normalize(typ :: Type) -> Type:
   doc: "Put a type into a normal form, in which type variables are named sequentially."
@@ -523,7 +565,7 @@ fun GEN_CONSTR(exp :: Expr) -> List<EqualCondition>:
       end
     | lamE(param, body) => 
       GEN_CONSTR(body) + GEN_CONSTR(idE(param))
-                       + [eqCon(tExpr(exp), 
+                       + [eqCon(tExpr(exp),
                                 tFunc(idE(param),
                                       body,
                                       [varT(GEN_VAR_ID())]))]
@@ -548,23 +590,40 @@ fun GEN_CONSTR(exp :: Expr) -> List<EqualCondition>:
     | uopE(uop, arg) =>
       cases (UnaryOperator) uop:
         | emptyOp =>
-# TODO: add id case
-          GEN_CONSTR(arg) + [eqCon(tExpr(exp), tUope(arg, []))]
-        | firstOp =>
-# TODO: add id case
           cases (Expr) arg:
             | bopE(bop, first, rest) =>
+              if (bop == linkOp):
+                GEN_CONSTR(arg) + [eqCon(tExpr(exp), tUope(arg, []))]
+              else:
+                raise("emptyOp: cannot apply on a non-link expression")
+              end
+            | idE(name) =>
+              [eqCon(tExpr(exp), tUope-var(exp, arg))]
+            | emptyE =>
+              GEN_CONSTR(arg) + [eqCon(tExpr(exp), tUope(arg, []))]
+# TODO: cases where "arg" could be evaluated to be a link
+            | else =>
+              raise("emptyOp: cannot apply on a non-link expression")
+          end
+        | firstOp =>
+          cases (Expr) arg:
+            | bopE(bop, first, rest) =>
+# FIXME: evaluating these two before unification is a very bad idea
+#                GEN_CONSTR(rest) + GEN_CONSTR(first) +
               if (bop == linkOp):
                 GEN_CONSTR(rest) + GEN_CONSTR(first)
                                   + [eqCon(tExpr(exp), tUopf(first, rest, []))]
               else:
                 raise("firstOp: cannot apply on a non-link expression")
               end
+            | idE(name) =>
+              [eqCon(tExpr(exp), tUopf-var(exp, arg))]
+            | emptyE =>
+              raise("firstOp: cannot apply on an empty list")
             | else =>
               raise("firstOp: cannot apply on a non-link expression")
           end
         | restOp =>
-# TODO: add id case
           cases (Expr) arg:
             | bopE(bop, first, rest) =>
               if (bop == linkOp):
@@ -573,6 +632,10 @@ fun GEN_CONSTR(exp :: Expr) -> List<EqualCondition>:
               else:
                 raise("restOp: cannot apply on a non-link expression")
               end
+            | idE(name) =>
+              [eqCon(tExpr(exp), tUopr-var(exp, arg))]
+            | emptyE =>
+              raise("restOp: cannot apply on an empty list")
             | else =>
               raise("restOp: cannot apply on a non-link expression")
           end
@@ -628,6 +691,54 @@ fun UNIFY(constr :: Constraint, substr :: Substitution) -> Substitution:
               end
               UNIFY(constraint(rest), substr)
           end
+        | tUopf-var(uop-exp, var-exp) =>
+          res-lookup :: Option = substr.lookup(var-exp.name)
+          if res-lookup <> none:
+            var-id = GEN_VAR_ID()
+            if not substr.replace(var-exp, conT(listT, [varT(var-id)])):
+              raise("unification error: " + var-exp.name)
+            else:
+              if not substr.replace(uop-exp, varT(var-id)):
+                raise("unification error: " + uop-exp)
+              else: nothing
+              end
+            end
+          else:
+            raise("unbound identifier: " + l.name)
+          end
+          UNIFY(constraint(rest), substr)
+        | tUopr-var(uop-exp, var-exp) =>
+          res-lookup :: Option = substr.lookup(var-exp.name)
+          if res-lookup <> none:
+            var-id = GEN_VAR_ID()
+            if not substr.replace(var-exp, conT(listT, [varT(var-id)])):
+              raise("unification error: " + var-exp.name)
+            else:
+              if not substr.replace(uop-exp, varT(var-id)):
+                raise("unification error: " + uop-exp)
+              else: nothing
+              end
+            end
+          else:
+            raise("unbound identifier: " + l.name)
+          end
+          UNIFY(constraint(rest), substr)
+        | tUope-var(uop-exp, var-exp) =>
+          res-lookup :: Option = substr.lookup(var-exp.name)
+          if res-lookup <> none:
+            var-id = GEN_VAR_ID()
+            if not substr.replace(var-exp, conT(listT, [varT(var-id)])):
+              raise("unification error: " + var-exp.name)
+            else:
+              if not substr.replace(uop-exp, baseT(numT)):
+                raise("unification error: " + uop-exp)
+              else: nothing
+              end
+            end
+          else:
+            raise("unbound identifier: " + l.name)
+          end
+          UNIFY(constraint(rest), substr)
         | else =>
           UNIFY(constraint(rest), substr)
       end
@@ -696,15 +807,18 @@ where:
     ', conT(listT, [varT("varT-")]), DEBUG)
     TEST_INFER_PASS('
       (link "hello" empty)
-    ', conT(listT, [baseT(strT), conT(listT, [varT("varT-")])]), DEBUG)
+    ', conT(listT, [baseT(strT)]), DEBUG)
     TEST_INFER_PASS('
       (link 3 (link "hello" empty))
-    ', conT(listT,
-            [baseT(numT),
-             conT(listT,
-                  [baseT(strT),
-                   conT(listT,
-                        [varT("varT-")])])]), DEBUG)
+    ', conT(listT, [baseT(numT)]), DEBUG)
+# Wrongly interpreting the list polymophism
+#
+#    ', conT(listT,
+#            [baseT(numT),
+#             conT(listT,
+#                  [baseT(strT),
+#                   conT(listT,
+#                        [varT("varT-")])])]), DEBUG)
   end
   fun test-fun():
     TEST_INFER_FAIL('
@@ -720,9 +834,7 @@ where:
       (fun (param) (link 3 empty))
     ', conT(funT, [varT("varT-"),
                    conT(listT,
-                        [baseT(numT),
-                         conT(listT,
-                              [varT("varT-")])])]), DEBUG)
+                        [baseT(numT)])]), DEBUG)
     TEST_INFER_PASS('
       (fun (param) (+ 3 param))
     ', conT(funT, [baseT(numT), baseT(numT)]), DEBUG)
@@ -832,10 +944,37 @@ where:
     ', baseT(numT), DEBUG)
     TEST_INFER_PASS('
       (rest (link 3 (link "hello" empty)))
-    ', conT(listT, [baseT(strT), conT(listT, [varT("varT-")])]), DEBUG)
+    ', conT(listT, [baseT(strT)]), DEBUG)
     TEST_INFER_PASS('
       (first (link 3 (link "hello" empty)))
     ', baseT(numT), DEBUG)
+    TEST_INFER_FAIL('
+      (first empty)
+    ', "firstOp: cannot apply on an empty list", DEBUG)
+    TEST_INFER_FAIL('
+      ((fun (param) (first param)) empty)
+    ', "firstOp: cannot apply on an empty list", DEBUG)
+    TEST_INFER_FAIL('
+      (rest empty)
+    ', "restOp: cannot apply on an empty list", DEBUG)
+    TEST_INFER_FAIL('
+      ((fun (param) (rest param)) empty)
+    ', "restOp: cannot apply on an empty list", DEBUG)
+    TEST_INFER_PASS('
+      (fun (param) (first param))
+    ', conT(funT, [conT(listT,
+                        [varT("varT-")]),
+                   varT("varT-")]), DEBUG)
+    TEST_INFER_PASS('
+      (fun (param) (rest param))
+    ', conT(funT, [conT(listT,
+                        [varT("varT-")]),
+                   varT("varT-")]), DEBUG)
+    TEST_INFER_PASS('
+      (fun (param) (empty? param))
+    ', conT(funT, [conT(listT,
+                        [varT("varT-")]),
+                   baseT(numT)]), DEBUG)
   end
   test-bop()
   test-link()
