@@ -10,7 +10,7 @@ result = gcd.result
 Loc = Number
 print-heap = gcd.print-heap
 
-IS_DEBUG = true
+IS_DEBUG = false
 
 ### Helper functions for writing tests ###
 
@@ -76,8 +76,27 @@ end
 fun pheap(rt): print(print-heap(rt.runtime));
 
 check:
-  fun test-and-print(code, size, pred, isDebug :: Bool):
+  fun TEST-FAILED(code, size, error-msg :: String, isDebug :: Bool):
     fun eval-and-print():
+      print("===================  (F) Test Case =====================")
+      print(code)
+      rt = eval(code, size)
+      rt
+    end
+    fun eval-no-print():
+      rt = eval(code, size)
+      rt
+    end
+    if isDebug:
+      eval-no-print() raises error-msg
+    else:
+      eval-no-print() raises ""
+    end
+  end
+  fun TEST-PASSED(code, size, pred, isDebug :: Bool):
+    fun eval-and-print():
+      print("=====================  Test Case ======================")
+      print(code)
       rt = eval(code, size)
       print("=====================  Heap after =====================")
       print(code)
@@ -87,8 +106,6 @@ check:
     end
     fun eval-no-print():
       rt = eval(code, size)
-      print("=====================  Test Case ======================")
-      print(code)
       rt
     end
     if isDebug:
@@ -97,72 +114,132 @@ check:
       eval-no-print() satisfies pred
     end
   end
-  fun TEST-BASIC-OPERATION(isDebug :: Bool):
-    test-and-print('
+  fun test-basic-operation(isDebug :: Bool):
+    TEST-PASSED('
       (+ 1 2)
     ', 14, hnum(3), isDebug)
-    test-and-print('
+    TEST-PASSED('
       (pair 3 4)
     ', 14, hpair(hnum(3), hnum(4)), isDebug)
-    test-and-print('
+    TEST-PASSED('
       (fun (my-param) my-param)
     ', 24, hclos([]), isDebug)
-    test-and-print('
+    TEST-PASSED('
       ((fun (my-param) my-param) 9)
     ', 24, hnum(9), isDebug)
-    test-and-print('
+    TEST-PASSED('
       (let (x 9)
            x)
     ', 8, hnum(9), isDebug)
-    test-and-print('
+    TEST-PASSED('
       (let (x 9)
            (let (y 10)
                 x))
     ', 8, hnum(9), isDebug)
-    test-and-print('
+    TEST-PASSED('
       (let (x 9)
            (let (my-fun (fun (y) x))
                 x))
     ', 80, hnum(9), isDebug)
-    test-and-print('
+    TEST-PASSED('
       (let (x 9)
            (let (my-fun (fun (y) x))
                 (my-fun 777)))
     ', 80, hnum(9), isDebug)
-    test-and-print('
+    TEST-PASSED('
       (if 1 1 0)
     ', 10, hnum(1), isDebug)
-    test-and-print('
+    TEST-PASSED('
       (if 0 1 0)
     ', 10, hnum(0), isDebug)
-    test-and-print('
+    TEST-PASSED('
       (let (x 9)
            (let (my-fun (fun (y) y))
                 (do (my-fun 777)
                     (my-fun 666)
                     (my-fun 555))))
     ', 80, hnum(555), isDebug)
-    test-and-print('
+    TEST-PASSED('
       (let (x 9)
            (let (my-fun (fun (y) (pair x y)))
                 (left (my-fun 777))))
     ', 80, hnum(9), isDebug)
-    test-and-print('
+    TEST-PASSED('
       (let (x 9)
            (let (my-fun (fun (y) (pair x y)))
                 (right (my-fun 777))))
     ', 80, hnum(777), isDebug)
-    test-and-print('
+    TEST-PASSED('
       (let (x 9)
            (let (my-fun (fun (y) (pair x y)))
                 (set-left (my-fun 777) 999)))
     ', 80, hnum(999), isDebug)
-    test-and-print('
+    TEST-PASSED('
       (let (x 9)
            (let (my-fun (fun (y) (pair x y)))
                 (set-right (my-fun 777) 888)))
     ', 80, hnum(888), isDebug)
   end
-  TEST-BASIC-OPERATION(IS_DEBUG)
+  fun test-garbage-collection(isDebug :: Bool):
+    TEST-FAILED('
+      (let (x 9)
+           (let (y 88)
+                (do 1 2 3 4 5 6)))
+    ', 10, "out-of-memory", isDebug)
+    TEST-PASSED('
+      (let (x 9)
+           (let (my-fun (fun (y) (+ 3 y)))
+                (do (my-fun 77))))
+    ', 22, hnum(80), isDebug)
+    TEST-PASSED('
+      (let (x 9)
+           (let (my-fun (fun (y) (+ 3 y)))
+                (do (my-fun 77)
+                    (my-fun 88))))
+    ', 22, hnum(91), isDebug)
+    TEST-FAILED('
+      (let (x 9)
+           (let (my-pair (pair 111 222))
+                (left my-pair)))
+    ', 14, "out-of-memory", isDebug)
+    TEST-PASSED('
+      (do 999
+          888
+          (let (my-pair (pair 111 222))
+               (left my-pair)))
+    ', 20, hnum(111), isDebug)
+    TEST-PASSED('
+      (do 999
+          888
+          (let (x 111)
+               (let (y 222)
+                    (let (my-fun (fun (y) (+ 3 y)))
+                         (do (my-fun 77))))))
+    ', 30, hnum(80), isDebug)
+    TEST-FAILED('
+      (do 999
+          888
+          (let (x 111)
+               (let (y 222)
+                    (let (my-fun (fun (y) (+ 3 y)))
+                         (do (my-fun 77))))))
+    ', 28, "out-of-memory", isDebug)
+    TEST-PASSED('
+      (do 999
+          888
+          (let (my-pair (pair 111 222))
+               (do (set-left my-pair 333)
+                   (left my-pair))))
+    ', 20, hnum(333), isDebug)
+    TEST-PASSED('
+      (do 999
+          888
+          (let (my-pair (pair 111 222))
+               (do (set-right my-pair 333)
+                   (right my-pair))))
+    ', 20, hnum(333), isDebug)
+  end
+  test-basic-operation(IS_DEBUG)
+  test-garbage-collection(IS_DEBUG)
 
 end

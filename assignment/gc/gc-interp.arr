@@ -75,35 +75,79 @@ fun interp(runtime :: Runtime, init-prog :: String) -> Loc:
   end
 
   fun get-num(loc :: Loc) -> Number:
-    check-cell(loc, "num")
-    runtime.memory.get(loc + 1)
+    mem-label = runtime.memory.get(loc)
+    if mem-label == "fwd":
+      new-loc = runtime.memory.get(loc + 1)
+      check-cell(new-loc, "num")
+      runtime.memory.get(new-loc + 1)
+    else:
+      check-cell(loc, "num")
+      runtime.memory.get(loc + 1)
+    end
   end
 
   fun get-lam(loc :: Loc) -> Expr:
-    check-cell(loc, "clos")
-    runtime.memory.get(loc + 1)
+    mem-label = runtime.memory.get(loc)
+    if mem-label == "fwd":
+      new-loc = runtime.memory.get(loc + 1)
+      check-cell(new-loc, "clos")
+      runtime.memory.get(new-loc + 1)
+    else:
+      check-cell(loc, "clos")
+      runtime.memory.get(loc + 1)
+    end
   end
 
   fun get-left(loc :: Loc) -> Loc:
-    check-cell(loc, "pair")
-    runtime.memory.get(loc + 1)
+    mem-label = runtime.memory.get(loc)
+    if mem-label == "fwd":
+      new-loc = runtime.memory.get(loc + 1)
+      check-cell(new-loc, "pair")
+      runtime.memory.get(new-loc + 1)
+    else:
+      check-cell(loc, "pair")
+      runtime.memory.get(loc + 1)
+    end
   end
 
   fun get-right(loc :: Loc) -> Loc:
-    check-cell(loc, "pair")
-    runtime.memory.get(loc + 2)
+    mem-label = runtime.memory.get(loc)
+    if mem-label == "fwd":
+      new-loc = runtime.memory.get(loc + 1)
+      check-cell(new-loc, "pair")
+      runtime.memory.get(new-loc + 2)
+    else:
+      check-cell(loc, "pair")
+      runtime.memory.get(loc + 2)
+    end
   end
 
   fun set-left(pair-loc :: Loc, val-loc :: Loc) -> Loc:
-    check-cell(pair-loc, "pair")
-    runtime.memory.set(pair-loc + 1, val-loc)
-    val-loc
+    mem-label = runtime.memory.get(pair-loc)
+    if mem-label == "fwd":
+      new-loc = runtime.memory.get(pair-loc + 1)
+      check-cell(new-loc, "pair")
+      runtime.memory.set(new-loc + 1, val-loc)
+      val-loc
+    else:
+      check-cell(pair-loc, "pair")
+      runtime.memory.set(pair-loc + 1, val-loc)
+      val-loc
+    end
   end
 
   fun set-right(pair-loc :: Loc, val-loc :: Loc) -> Loc:
-    check-cell(pair-loc, "pair")
-    runtime.memory.set(pair-loc + 2, val-loc)
-    val-loc
+    mem-label = runtime.memory.get(pair-loc)
+    if mem-label == "fwd":
+      new-loc = runtime.memory.get(pair-loc + 1)
+      check-cell(new-loc, "pair")
+      runtime.memory.set(new-loc + 2, val-loc)
+      val-loc
+    else:
+      check-cell(pair-loc, "pair")
+      runtime.memory.set(pair-loc + 2, val-loc)
+      val-loc
+    end
   end
 
   fun lookup-id(id :: String, stack :: List<Env>) -> Loc:
@@ -133,11 +177,14 @@ fun interp(runtime :: Runtime, init-prog :: String) -> Loc:
       | lamE(name, body) =>
           alloc-closure(runtime, stack, prog, stack.first)
       | appE(lam, arg) =>
+#          print("stack one: " + torepr(stack))
           lam-loc = box(interp-full(stack, lam))
           arg-loc = box(interp-full(add-temp(lam-loc, stack), arg))
           the-fun = get-lam(lam-loc!v)
           the-env = cells-to-env(lam-loc!v + 2)
+#          print("the lamda stack: " + torepr(the-env))
           stack2 = add-binding(the-fun.param, arg-loc, add-env(the-env, stack))
+#          print("stack two: " + torepr(stack2))
           interp-full(stack2, the-fun.body)
       | plusE(left, right) =>
           n1 = get-num(interp-full(stack, left))
