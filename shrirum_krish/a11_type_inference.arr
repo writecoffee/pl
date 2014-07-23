@@ -976,11 +976,13 @@ where:
                         [varT("varT-")]),
                    baseT(numT)]), DEBUG)
   end
-  test-bop()
-  test-link()
-  test-fun()
-  test-let()
-  test-cif()
-  test-app()
-  test-uop()
+#  test-bop()
+#  test-link()
+#  test-fun()
+#  test-let()
+#  test-cif()
+#  test-app()
+#  test-uop()
+  type-infer("(rest (link 3 empty))") satisfies same-type(_, conT(listT, [baseT(numT)]))
+  type-infer('(rest (link "foo" empty))') satisfies same-type(_, conT(listT, [baseT(strT)]))
 end
