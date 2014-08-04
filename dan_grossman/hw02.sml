@@ -122,6 +122,13 @@ fun remove_card(cs, c, e) =
 	aux([], cs)
     end
 
+fun all_same_color(cs) =
+    case cs of
+	[] => true
+      | _ :: [] => true
+      | first :: second :: rest => card_color(first) = card_color(second) 
+				   andalso all_same_color(second :: rest)
+
 fun sum_cards(cs) =
     let fun aux(pre, cs) =
 	    case cs of
@@ -133,34 +140,29 @@ fun sum_cards(cs) =
 
 fun score(cs, goal) =
     let val tsum = sum_cards(cs)
+	val preliminary = if tsum > goal then (tsum - goal) * 3 else goal - tsum
     in 
-	if tsum > goal then
-	    3 * (tsum - goal) div 2
+	if all_same_color(cs) then
+	    preliminary div 2
 	else
-	    (goal - tsum) div 2
+	    preliminary
     end
 
 fun officiate(card_list, move_list, goal) =
-    let fun next_turn(cmove, rest_move, card_list, held_cards) =
-	    let fun aux(card_list) =
-		    case card_list of
-			[] => ([], [], held_cards)
-		      | ccard :: rest_card => let val new_held = ccard :: held_cards
-					      in
-						  if sum_cards(new_held) > goal then
-						      ([], [], new_held)
-						  else
-						      (rest_move, rest_card, new_held)
-					      end
-	    in
-		case cmove of
-		    Draw => aux(card_list)
-		  | Discard(rcard) => (rest_move, card_list, remove_card(held_cards, rcard, IllegalMove))
-	    end
-	fun turn(move_list, card_list, held_cards) =
-	    case move_list of
-		[] => score(held_cards, goal)
-	      | cmove :: rest_move => turn(next_turn(cmove, rest_move, card_list, held_cards))
+    let fun aux(card_list, move_list, held_cards) =
+	    case (card_list, move_list, held_cards) of
+		(_, [], _) => score(held_cards, goal)
+	     | ([], _, _) => score(held_cards, goal)
+	     | (cs, Discard(c) :: rest_moves, helds) => 
+	       aux(cs, rest_moves, remove_card(helds, c, IllegalMove))
+	     | (c :: cs, Draw :: rest_moves, helds) => let val new_helds = c :: helds
+							   val tsum = sum_cards(new_helds)
+						       in
+							   if tsum > goal then
+							       score(new_helds, goal)
+							   else
+							       aux(cs, rest_moves, new_helds)
+						       end
     in
-	turn(move_list, card_list, [])
+	aux(card_list, move_list, [])
     end
