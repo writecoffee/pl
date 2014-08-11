@@ -1,14 +1,15 @@
-(* 1. This problem involves using ﬁrst-name substitutions to come up with alternate names. For example,
-      Fredrick William Smith could also be Fred William Smith or Freddie William Smith. Only part (d) is
-      speciﬁcally about this, but the other problems are helpful.
+(* 1. This problem For example, Fredrick William Smith could also be Fred William Smith or
+      Freddie William Smith. Only part (d) is
 
-      (a) Write a function all_except_option, which takes a string and a string list. Return NONE if the
-          string is not in the list, else return SOME lst where lst is identical to the argument list except
-          the string is not in it. You may assume the string is in the list at most once. Use same_string,
-          provided to you, to compare strings. Sample solution is around 8 lines.
+      (a) Write a function all_except_option, which takes a string and a string list. Return
+          NONE if the string is not in the list, else return SOME lst where lst is identical
+          to the argument list except the string is not in it. You may assume the string is
+          in the list at most once. Use same_string, provided to you, to compare strings.
+          Sample solution is around 8 lines.
 
-      (b) Write a function get_substitutions1, which takes a string list list (a list of list of strings, the
-          substitutions) and a string s and returns a string list. The result has all the strings that are in
+      (b) Write a function get_substitutions1, which takes a string list list (a list of list
+          of strings, the substitutions) and a string s and returns a string list. The result
+          has all the strings that are in
           some list in substitutions that also has s, but s itself should not be in the result.
 
           Example:
@@ -166,3 +167,59 @@ fun officiate(card_list, move_list, goal) =
     in
 	aux(card_list, move_list, [])
     end
+
+fun retrieve_suit(card) =
+    case card of
+	(Diamonds, _) => Diamonds
+      | (Spades, _) => Spades
+      | (Clubs, _) => Clubs
+      | (Hearts, _) => Hearts
+
+fun score_challenge(cs, goal) =
+    let fun aux(pre, cs) =
+	    case cs of
+		[] => score(pre, goal)
+              | first :: rest => if card_value(first) = 11 then
+                                     Int.min(aux(first :: pre, rest),
+                                             aux((retrieve_suit(first), Num(1)) :: pre, rest))
+                                 else
+                                     aux(first :: pre, rest)
+    in
+        aux([], cs)
+    end
+
+fun officiate_challenge(card_list, move_list, goal) =
+    let fun aux(pre_sum, card_list, move_list, held_cards) =
+	    case (card_list, move_list, held_cards) of
+		(_, [], _) => 
+		score_challenge(held_cards, goal)
+	      | ([], _, _) =>
+		score_challenge(held_cards, goal)
+	      | (cs, Discard(c) :: rest_moves, helds) =>
+		aux(pre_sum, cs, rest_moves, remove_card(helds, c, IllegalMove))
+	      | ((suit, Ace) :: cs, Draw :: rest_moves, helds) =>
+		let val tsum1 = pre_sum + 1
+		    val tsum11 = pre_sum + 11
+		    val new_helds = (suit, Ace) :: held_cards
+		in
+		    if tsum1 > goal then
+			score_challenge(new_helds, goal)
+		    else if tsum11 > goal then
+			Int.min(score_challenge(new_helds, goal), aux(tsum1, cs, rest_moves, new_helds))
+		    else
+			Int.min(aux(tsum1, cs, rest_moves, new_helds), aux(tsum11, cs, rest_moves, new_helds))
+		end
+	      | (c :: cs, Draw :: rest_moves, helds) =>
+		let val new_sum = card_value(c) + pre_sum
+		in
+		    if new_sum > goal then
+			score_challenge(c :: helds, goal)
+		    else
+			aux(new_sum, cs, rest_moves, c :: helds)
+		end
+    in
+	aux(0, card_list, move_list, [])
+    end
+
+
+    
