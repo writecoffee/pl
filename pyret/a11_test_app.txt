@@ -1,0 +1,19 @@
+((fun (param) param) 99)
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(appE(lamE("param", numE(3)), numE(99))),
+      tLbdy(idE("param"),
+            idE("param"),
+            []))
+------------------------------
+eqCon(tExpr(idE("param")),
+      tBind(numE(99)))
+eqCon(tExpr(numE(99)),
+      tType(baseT(numT)))
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+eqCon(tExpr(idE("param")),
+      tType(varT("a")))
+
+=========================================================================
+
+((fun (param) param) 99)

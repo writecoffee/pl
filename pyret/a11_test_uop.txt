@@ -1,0 +1,74 @@
+(empty? empty)
+
+eqCon(tExpr(uopE(emptyOp, emptyE)),
+      tUope(emptyE))
+eqCon(tExpr(emptyE),
+      tType(conT(listT, [varT("a")])))
+      
+=========================================================================
+
+(empty? (link "hello" empty))
+
+eqCon(tExpr(uopE(emptyOp,
+                 bopE(linkOp,
+                      strE("hello"),
+                      emptyE))),
+      tUope(bopE(linkOp,
+                 strE("hello"),
+                 emptyE)))
+eqCon(tExpr(bopE(linkOp, strE("hello"), emptyE)),
+      tLink(strE("hello"), emptyE, []))
+eqCon(tExpr(strE("hello")),
+      tType(baseT(strT)))
+eqCon(tExpr(emptyE),
+      tType(conT(listT, [varT("a")])))
+
+=========================================================================
+
+(rest (link 3 (link "hello" empty)))
+
+eqCon(tExpr(uopE(restOp,
+                 bopE(linkOp,
+                      numE(3),
+                      bopE(linkOp,
+                           strE("hello"),
+                           emptyE)))),
+      tUopr(numE(3),
+            bopE(linkOp,
+                 strE("hello"),
+                 emptyE),
+            [])),
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+eqCon(tExpr(bopE(linkOp, strE("hello"), emptyE)),
+      tLink(strE("hello"), emptyE, []))
+eqCon(tExpr(strE("hello")),
+      tType(baseT(strT)))
+eqCon(tExpr(emptyE),
+      tType(conT(listT, [varT("a")])))
+
+=========================================================================
+
+(first (link 3 (link "hello" empty)))
+
+eqCon(tExpr(uopE(restOp,
+                 bopE(linkOp,
+                      numE(3),
+                      bopE(linkOp,
+                           strE("hello"),
+                           emptyE)))),
+      tUopf(numE(3),
+            bopE(linkOp,
+                 strE("hello"),
+                 emptyE),
+            [])),
+eqCon(tExpr(numE(3)),
+      tType(baseT(numT)))
+eqCon(tExpr(bopE(linkOp, strE("hello"), emptyE)),
+      tLink(strE("hello"), emptyE, []))
+eqCon(tExpr(strE("hello")),
+      tType(baseT(strT)))
+eqCon(tExpr(emptyE),
+      tType(conT(listT, [varT("a")])))
+
+=========================================================================
