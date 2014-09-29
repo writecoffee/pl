@@ -1,10 +1,9 @@
-(* Week 1:
+(* Week 1 *)
 
-   1. Write a function is_older that takes two dates and evaluates to true
+(*  1. Write a function is_older that takes two dates and evaluates to true
       or false. It evaluates to true if the ﬁrst argument is a date that comes
       before the second argument. (If the two dates are the same, the result is
-      false.)
-*)
+      false.) *)
 fun is_older(d1 : int * int * int, d2 : int * int * int) =
     let val y1=(#1 d1) val m1=(#2 d1) val day1=(#3 d1)
         val y2=(#1 d2) val m2=(#2 d2) val day2=(#3 d2)
