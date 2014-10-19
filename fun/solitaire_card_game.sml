@@ -30,92 +30,92 @@ datatype move = Discard of card | Draw
 
 exception IllegalMove
 
-fun card_color(c) =
+fun card_color (c) =
     case c of (Spades, _) => Black
 	    | (Clubs, _) => Black
 	    | (Hearts, _) => Red
 	    | (Diamonds, _) => Red
 
-fun card_value(c) =
+fun card_value (c) =
     case c of (_, Ace) => 11
-	    | (_, Num(num)) => num
+	    | (_, Num (num)) => num
 	    | _ => 10
 
-fun remove_card(cs, c : (suit * rank), e) =
-    let fun aux(pre, cs) =
+fun remove_card (cs, c : (suit * rank), e) =
+    let fun aux (pre, cs) =
 	    case cs of
 		[] => raise e
 	     | head :: tail => if head = c then
 				   pre @ tail
 			       else
-				   aux(pre @ [head], tail)
+				   aux (pre @ [head], tail)
     in
-	aux([], cs)
+	aux ([], cs)
     end
 
-fun all_same_color(cs) =
+fun all_same_color (cs) =
     case cs of
 	[] => true
       | _ :: [] => true
-      | first :: second :: rest => card_color(first) = card_color(second) 
-				   andalso all_same_color(second :: rest)
+      | first :: second :: rest => card_color (first) = card_color (second)
+				   andalso all_same_color (second :: rest)
 
-fun sum_cards(cs) =
-    let fun aux(pre, cs) =
+fun sum_cards (cs) =
+    let fun aux (pre, cs) =
 	    case cs of
 		[] => pre
-	     | head :: tail => aux(pre + card_value(head), tail)
+	     | head :: tail => aux (pre + card_value (head), tail)
     in
-	aux(0, cs)
+	aux (0, cs)
     end
 
-fun score(cs, goal) =
-    let val tsum = sum_cards(cs)
+fun score (cs, goal) =
+    let val tsum = sum_cards (cs)
 	val preliminary = if tsum > goal then (tsum - goal) * 3 else goal - tsum
     in 
-	if all_same_color(cs) then
+	if all_same_color (cs) then
 	    preliminary div 2
 	else
 	    preliminary
     end
 
-fun officiate(card_list, move_list, goal) =
-    let fun aux(card_list, move_list, held_cards) =
+fun officiate (card_list, move_list, goal) =
+    let fun aux (card_list, move_list, held_cards) =
 	    case (card_list, move_list, held_cards) of
-		(_, [], _) => score(held_cards, goal)
-	     | ([], _, _) => score(held_cards, goal)
-	     | (cs, Discard(c) :: rest_moves, helds) => 
-	       aux(cs, rest_moves, remove_card(helds, c, IllegalMove))
+		(_, [], _) => score (held_cards, goal)
+	     | ([], _, _) => score (held_cards, goal)
+	     | (cs, Discard (c) :: rest_moves, helds) =>
+	       aux (cs, rest_moves, remove_card (helds, c, IllegalMove))
 	     | (c :: cs, Draw :: rest_moves, helds) =>
 	       let val new_helds = c :: helds
-		   val tsum = sum_cards(new_helds)
+		   val tsum = sum_cards (new_helds)
 	       in
 		   if tsum > goal then
-		       score(new_helds, goal)
+		       score (new_helds, goal)
 		   else
-		       aux(cs, rest_moves, new_helds)
+		       aux (cs, rest_moves, new_helds)
 	       end
     in
-	aux(card_list, move_list, [])
+	aux (card_list, move_list, [])
     end
 
-fun retrieve_suit(card) =
+fun retrieve_suit (card) =
     case card of
 	(Diamonds, _) => Diamonds
       | (Spades, _) => Spades
       | (Clubs, _) => Clubs
       | (Hearts, _) => Hearts
 
-fun score_challenge(cs, goal) =
-    let fun aux(pre, cs) =
+fun score_challenge (cs, goal) =
+    let fun aux (pre, cs) =
 	    case cs of
-		[] => score(pre, goal)
+		[] => score (pre, goal)
               | first :: rest =>
-		if card_value(first) = 11 then
-                    Int.min(aux(first :: pre, rest),
-                            aux((retrieve_suit(first), Num(1)) :: pre, rest))
+		if card_value (first) = 11 then
+                    Int.min (aux (first :: pre, rest),
+                             aux ((retrieve_suit (first), Num (1)) :: pre, rest))
                 else
-                    aux(first :: pre, rest)
+                    aux (first :: pre, rest)
     in
-        aux([], cs)
+        aux ([], cs)
     end

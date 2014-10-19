@@ -67,40 +67,40 @@
           *)
 *)
 
-fun same_string(s1 : string, s2 : string) =
+fun same_string (s1 : string, s2 : string) =
     s1 = s2
 
-fun all_except_option(str, str_list) =
-    let fun aux(first_half, sec_half) =
+fun all_except_option (str, str_list) =
+    let fun aux (first_half, sec_half) =
             case sec_half of
                 [] => NONE
-              | head :: rest => if same_string(str, head) then
-                                    SOME(first_half @ rest)
+              | head :: rest => if same_string (str, head) then
+                                    SOME (first_half @ rest)
                                 else
-                                    aux(first_half @ [head], rest)
+                                    aux (first_half @ [head], rest)
     in
-        aux([], str_list)
+        aux ([], str_list)
     end
 
-fun get_substitutions(subs, s) =
-    let fun aux(pre, subs) =
+fun get_substitutions (subs, s) =
+    let fun aux (pre, subs) =
             case subs of
                 [] => pre
-              | head_list :: rest => case all_except_option(s, head_list) of
-                                         NONE => aux(pre, rest)
-                                       | SOME(c) => aux(pre @ c, rest)
+              | head_list :: rest => case all_except_option (s, head_list) of
+                                         NONE => aux (pre, rest)
+                                       | SOME c => aux (pre @ c, rest)
     in
-        aux([], subs)
+        aux ([], subs)
     end
 
-fun similar_names(subs, full_name) =
-    let fun aux(pre, similars, middle, last) =
+fun similar_names (subs, full_name) =
+    let fun aux (pre, similars, middle, last) =
             case similars of
                 [] => pre
-             | head :: tail => aux(pre @ [{first = head, middle = middle, last = last}],
-                                   tail, middle, last)
+              | head :: tail => aux (pre @ [{ first = head, middle = middle, last = last }],
+                                     tail, middle, last)
     in
         case full_name of
-            {first, middle, last} =>
-            full_name :: aux([], get_substitutions(subs, first), middle, last)
+            { first, middle, last } =>
+            full_name :: aux ([], get_substitutions (subs, first), middle, last)
     end
