@@ -5,20 +5,20 @@ exception NoAnswer
 (* 1. Write a function only_capitals that takes a string list and returns a string list that has only
       the strings in the argument that start with an uppercase letter. Assume all strings have at least 1
       character. Use List.filter, Char.isUpper, and String.sub to make a 1-2 line solution. *)
-fun only_capitals(strs) =
-    List.filter (fn s => Char.isUpper(String.sub(s, 0))) strs
+fun only_capitals (strs) =
+    List.filter (fn s => Char.isUpper (String.sub (s, 0))) strs
 
 (* 2. Write a function longest_string1 that takes a string list and returns the longest string in the
      list. If the list is empty, return "". In the case of a tie, return the string closest to the beginning of the
      list. Use foldl, String.size, and no recursion (other than the implementation of foldl is recursive). *)
-fun longest_string1(strs) =
-    List.foldl (fn (s, acc) => if String.size(s) > String.size(acc) then s else acc) "" strs
+fun longest_string1 (strs) =
+    List.foldl (fn (s, acc) => if String.size s > String.size acc then s else acc) "" strs
 
 (* 3. Write a function longest_string2 that is exactly like longest_string1 except in the case of ties
       it returns the string closest to the end of the list. Your solution should be almost an exact copy of
       longest_string1. Still use foldl and String.size. *)	   
-fun longest_string2(strs) =
-    List.foldl (fn (s, acc) => if String.size(s) >= String.size(acc) then s else acc) "" strs
+fun longest_string2 (strs) =
+    List.foldl (fn (s, acc) => if String.size s >= String.size acc then s else acc) "" strs
 
 (* 4.0. longest_string_helper has type (int * int -> bool) -> string list -> string
         (notice the currying). This function will look a lot like longest_string1 and longest_string2
@@ -85,13 +85,13 @@ fun all_answers f xs =
 		[] => SOME acc
 	      | x :: xs' => case f x of
 				NONE => NONE
-			      | SOME v => aux (f, xs, v @ acc)
+			      | SOME v => aux (f, xs', acc @ v)
     in
 	aux (f, xs, [])
     end
 
-(* The remaining problems use these type denitions, which are inspired by the type denitions an ML imple-
-mentation would use to implement pattern matching: *)
+(* The remaining problems use these type definitions, which are inspired by the type definitions an ML
+   implementation would use to implement pattern matching: *)
 
 datatype pattern = Wildcard
 		 | Variable of string
@@ -110,11 +110,11 @@ fun g f1 f2 p =
 	val r = g f1 f2 
     in
 	case p of
-	    Wildcard           => f1 ()
-	  | Variable x         => f2 x
-	  | TupleP ps          => List.foldl (fn (p, acc) => (r p) + acc) 0 ps
-	  | ConstructorP(_, p) => r p
-	  | _                  => 0
+	    Wildcard            => f1 ()
+	  | Variable x          => f2 x
+	  | TupleP ps           => List.foldl (fn (p, acc) => (r p) + acc) 0 ps
+	  | ConstructorP (_, p) => r p
+	  | _                   => 0
     end
 
 (* 9.1. Use g to define a function count_wildcards that takes a pattern and returns how many Wildcard
@@ -140,21 +140,21 @@ fun count_some_var (s, p) =
        names are not relevant. Hints: The sample solution uses two helper functions. The list takes a
        pattern and returns a list of all the strings it uses for variables. Using foldl with a function that
        uses append is useful in one case. The second takes a list of strings and decides if it has repeats.
-       List.exists may be useful. Sample solution is 15 lines. These are hints: We are not requiring foldl
-       and List.exists here, but they make it easier. *)
+       List.exists may be useful. Sample solution is 15 lines. *)
 fun check_pat p =
     let fun all_variables p =
 	    case p of
 		Wildcard => []
 	      | TupleP ps => List.foldl (fn (v, vs) => vs @ all_variables v) [] ps
 	      | ConstructorP (_, p) => all_variables p
+	      | Variable s => [s]
 	      | _ => []
-	fun is_repeated xs =
+	fun is_all_distinct xs =
 	    case xs of
 		[] => true
-	      | x :: xs' => not (List.exists (fn x' : string => x' = x) xs') andalso is_repeated xs'
+	      | x :: xs' => not (List.exists (fn x' : string => x' = x) xs') andalso is_all_distinct xs'
     in
-	is_repeated (all_variables p)
+	is_all_distinct (all_variables p)
     end
 
 (* 11. Write a function match that takes a valu * pattern and returns a (string * valu) list option,
@@ -176,14 +176,14 @@ fun match (v, p) =
       | ConstP k => (
 	  case v of
 	      Const k' => if k = k' then SOME [] else NONE
-	   | _ => NONE
+	    | _ => NONE
       )
       | TupleP ps => (
 	  case v of
               Tuple vs => if List.length vs = List.length ps then
-			       all_answers match (ListPair.zip (vs, ps))
-                           else
-			       NONE
+			      all_answers match (ListPair.zip (vs, ps))
+                          else
+			      NONE
             | _ => NONE
       )
       | ConstructorP(s, p) => (
@@ -195,7 +195,7 @@ fun match (v, p) =
 
 (* 12. Write a function first_match that takes a value and a list of patterns and returns a
        (string * valu) list option, namely NONE if no pattern in the list matches or SOME lst where
-       lst is the list of bindings for the rst pattern in the list that matches. Use first_answer and a
+       lst is the list of bindings for the list pattern in the list that matches. Use first_answer and a
        handle-expression. Hints: Sample solution is 3 lines. *)
 fun first_match v ps =
     SOME (first_answer (fn p => match (v, p)) ps) handle NoAnswer => NONE
